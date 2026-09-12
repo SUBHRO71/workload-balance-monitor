@@ -7,6 +7,9 @@ import {
   Closing,
   NotSurveillance,
 } from "./pulse/sections";
+import { Navigation, type NavTab } from "./components/Navigation";
+import { WorkloadProvider } from "./context/WorkloadContext";
+import { DashboardPage } from "./pages/DashboardPage";
 
 function Nav() {
   return (
@@ -16,7 +19,7 @@ function Nav() {
         <span className="nav__word">PULSE</span>
       </a>
 
-      <a className="underline" href="#get-started">
+      <a className="underline" href="/app">
         Get Started
       </a>
     </header>
@@ -163,6 +166,10 @@ function Footer() {
 }
 
 export function App() {
+  return window.location.pathname === "/app" ? <DashboardRoute /> : <LandingPage />;
+}
+
+function LandingPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -190,5 +197,23 @@ export function App() {
         <Footer />
       </div>
     </>
+  );
+}
+
+function DashboardRoute() {
+  const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
+
+  return (
+    <WorkloadProvider>
+      <Navigation
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        isDemoMode
+        onToggleDemo={() => undefined}
+      />
+      <main style={{ maxWidth: "1000px", margin: "0 auto", padding: "30px 20px" }}>
+        <DashboardPage />
+      </main>
+    </WorkloadProvider>
   );
 }
