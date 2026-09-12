@@ -167,6 +167,10 @@ describe("Phase 3: Explicit Manager Sharing Lifecycle", () => {
     const managerPub = await store.getManagerPublication(orgId, { userId: managerId, tokenGroups: ["manager"] }, grant.id);
     expect(managerPub.grant.id).toBe(grant.id);
     expect(managerPub.publication.selectedValues).toHaveLength(2);
+    const history = await store.listAccessHistory(orgId, employeeId);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ ownerId: employeeId, recipientId: managerId, grantId: grant.id, action: "grant.read" });
+    expect(history[0]).not.toHaveProperty("taskTitle");
 
     // Charlie (unauthorized manager) attempts to read publication
     await expect(

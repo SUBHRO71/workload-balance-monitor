@@ -277,6 +277,11 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
       }
     }
 
+    if (path === "/v1/me/access-history" && method === "GET") {
+      const items = await store.listAccessHistory(orgId, caller.userId);
+      return json(200, { items });
+    }
+
     const shareMatch = path.match(/^\/v1\/me\/shares\/([A-Za-z0-9_-]+)$/);
     if (shareMatch) {
       const grantId = shareMatch[1]!;

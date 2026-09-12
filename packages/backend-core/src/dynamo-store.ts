@@ -13,6 +13,7 @@ import {
 import {
   adminAuditRecordSchema,
   aggregateResponseSchema,
+  accessAuditRecordSchema,
   checkInRecordSchema,
   consentRecordSchema,
   correctionRecordSchema,
@@ -37,6 +38,7 @@ import {
   type AcceptInvitationInput,
   type AdminAuditRecord,
   type AggregateResponse,
+  type AccessAuditRecord,
   type CheckInInput,
   type CheckInRecord,
   type CheckInUpdate,
@@ -793,7 +795,29 @@ export class WorkloadStore implements AuthorizationStore {
     await requireManagerPublication(this, caller, grant, new Date());
     const publication = await this.getPublication(orgId, grantId, 1);
     if (!publication) throw new AuthorizationError("Shared publication is not available", 404);
+    await this.recordAccessAudit(orgId, grant.ownerId, caller.userId, grant.id);
     return { grant, publication };
+  }
+
+  private async recordAccessAudit(orgId: string, ownerId: string, recipientId: string, grantId: string): Promise<void> {
+    const timestamp = new Date().toISOString();
+    const record: AccessAuditRecord = accessAuditRecordSchema.parse({
+      entityType: "ACCESS_AUDIT", id: `audit-${randomUUID()}`, orgId, ownerId, recipientId, grantId, action: "grant.read", timestamp,
+    });
+    await this.client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: { ...keys.accessAudit(orgId, ownerId, timestamp, record.id), ...record },
+    }));
+  }
+
+  async listAccessHistory(orgId: string, ownerId: string): Promise<AccessAuditRecord[]> {
+    const prefix = keys.accessAudit(orgId, ownerId);
+    const result = await this.client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": prefix.PK, ":sk": prefix.SK }, ConsistentRead: true,
+    }));
+    return (result.Items ?? []).map((item) => accessAuditRecordSchema.parse(cleanItem(item)));
   }
 
   // Phase 4: Protected Team & HR Releases

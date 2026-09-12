@@ -33,6 +33,13 @@ The earlier verified baseline was 14 suites / 61 tests. The proposed additions t
 - Still open: real DynamoDB transaction/race and rollback tests; invitation onboarding/offboarding integration; access-history persistence/API; HR/manager endpoint tests; worker generation/idempotency/notification handling; S3 export and deletion-scope semantics; restore markers; authenticated client/cache journeys; real API Gateway JWT tests.
 - Restart here: run full `pnpm check`, commit/push this checkpoint, then implement access-history plus worker stale-generation/idempotency handling. Keep the remaining items explicitly open until real persistence or integration evidence exists.
 
+### 2026-09-13 — access-history checkpoint
+
+- Added an `ACCESS_AUDIT` contract and owner-scoped `ACCESSAUDIT#ORG#...#OWNER#...` partition. Successful manager publication reads now write a minimal audit record containing recipient, grant, action and timestamp only; owners can list it through `GET /v1/me/access-history`.
+- Extended the sharing lifecycle test to verify one audit record and absence of content fields. Backend typecheck and the full Vitest invocation passed: 18 suites / 74 tests.
+- Remaining audit caveat: records are currently append-only without the planned retention/anonymization worker or retry deduplication key. Those are still required for production readiness.
+- Restart here: implement worker stale-generation and notification/job idempotency checks, then add HR/manager endpoint isolation tests and an explicit audit-retention test.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |

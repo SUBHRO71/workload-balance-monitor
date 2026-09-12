@@ -34,6 +34,7 @@ export const keys = {
   notification: (orgId: string, userId: string, timestamp?: string, noticeId?: string) => ({ PK: `NOTICE#ORG#${safe(orgId)}#USER#${safe(userId)}`, SK: timestamp && noticeId ? `NOTICE#${timestamp}#${safe(noticeId)}` : "NOTICE#" }),
   notificationPreferences: (orgId: string, userId: string) => ({ PK: `NOTICE#ORG#${safe(orgId)}#USER#${safe(userId)}`, SK: "PREFERENCES" }),
   adminAudit: (orgId: string, timestamp?: string, eventId?: string) => ({ PK: `ADMINAUDIT#ORG#${safe(orgId)}`, SK: timestamp && eventId ? `EVENT#${timestamp}#${safe(eventId)}` : "EVENT#" }),
+  accessAudit: (orgId: string, ownerId: string, timestamp?: string, eventId?: string) => ({ PK: `ACCESSAUDIT#ORG#${safe(orgId)}#OWNER#${safe(ownerId)}`, SK: timestamp && eventId ? `EVENT#${timestamp}#${safe(eventId)}` : "EVENT#" }),
   outbox: (shard: number, timestamp: string, eventId: string) => ({ PK: `OUTBOX#${shard}`, SK: `EVENT#${timestamp}#${safe(eventId)}` }),
   idempotency: (orgId: string, userId: string, hash: string) => ({ PK: `REQUEST#ORG#${safe(orgId)}#USER#${safe(userId)}`, SK: `KEY#${safe(hash)}` }),
 } as const;
