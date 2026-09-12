@@ -25,7 +25,16 @@ async function exchangeCode(code: string): Promise<{ access_token: string; id_to
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: redirectUri }),
   });
-  if (!response.ok) throw new Error("Unable to complete sign-in");
+  if (!response.ok) {
+    let detail = "Unable to complete sign-in";
+    try {
+      const payload = (await response.json()) as { error?: string; error_description?: string };
+      detail = payload.error_description ?? payload.error ?? detail;
+    } catch {
+      // Keep the safe generic message when the provider does not return JSON.
+    }
+    throw new Error(detail);
+  }
   return (await response.json()) as { access_token: string; id_token?: string };
 }
 
