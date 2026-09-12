@@ -49,6 +49,13 @@ The earlier verified baseline was 14 suites / 61 tests. The proposed additions t
 
 Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm check` passed at the prior checkpoint (`a0e3f81`); the subsequent worker-only change has backend/workers typechecks passing but should be included in the next full check.
 
+### 2026-09-13 — AWS development deployment
+
+- CDK bootstrap and `WorkloadMonitorDevelopment` deployment completed successfully in the configured personal development account and `us-east-1`.
+- The deployment emitted API, Cognito, table, queue, and private export-bucket outputs. Keep those values in local `.env` files or a password manager; do not commit them to this public repository.
+- Deployment is synthetic-development only. PITR remains disabled, weekly schedule remains disabled, and the deployed API still requires Cognito users before authenticated route testing.
+- Restart here: configure `apps/web/.env.local` and `apps/mobile/.env`, then create synthetic Cognito users and verify `/health` and authenticated `/v1/me`.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |
