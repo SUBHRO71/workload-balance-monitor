@@ -1,0 +1,12 @@
+{
+  "extends": "../packages/tooling/tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "bin",
+    "lib"
+  ]
+}

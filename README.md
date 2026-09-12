@@ -2,7 +2,7 @@
 
 **Track:** Workforce, Productivity & Digital Life
 
-**Status:** Architecture reviewed; implementation not started
+**Status:** Monorepo scaffold initialized; product features not implemented
 
 A privacy-first tool that combines synthetic task loads, working-pattern signals, and voluntary self-reports to describe potentially unsustainable workload trends. It makes no clinical judgments and never ranks employees.
 
@@ -114,7 +114,7 @@ Clients read authorized snapshots; they do not invoke unrestricted aggregation j
 
 ## Single monorepo for web, mobile, and backend
 
-The following is the **planned structure**, not a claim that these applications are implemented:
+The following structure is initialized with starter apps, package boundaries, and development configuration. Product features remain to be implemented:
 
 ```text
 workload-balance-monitor/
@@ -194,9 +194,22 @@ Required checks include cross-tenant access denial, manager scope enforcement, c
 
 ## Repository status and setup
 
-This initial repository contains planning documentation and repository hygiene only. Application packages, infrastructure, and pipelines have not yet been scaffolded. There are no installation, test, or deployment commands to run yet.
+The repository includes React/Vite and Expo starter screens, shared TypeScript packages, fail-closed backend entry points, an empty CDK stack, and a validation CI workflow. It does not implement authentication, workload processing, aggregation, or cloud deployment.
 
-When implementation begins, pin the package manager and supported runtimes, commit the workspace lockfile, and document actual commands here. Provision infrastructure through CDK rather than mixing ad hoc console changes with multiple infrastructure tools.
+Use Node.js 24 LTS (Node 22.13+ is also supported) and pnpm 10.30.0:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.30.0 --activate
+pnpm install --frozen-lockfile
+pnpm dev:web
+# In another terminal:
+pnpm dev:mobile
+```
+
+Run `pnpm check` for lint, type-checks, consent contract tests, and web/backend builds. Run `pnpm mobile:check` for Expo dependency compatibility and `pnpm infra:synth` for local empty-stack synthesis. Native device testing and deployment are separate steps. On restricted Windows PowerShell, use `pnpm.cmd` instead of `pnpm`.
+
+See [local development](docs/development.md) for command details and [engineering documentation](docs/README.md) for architecture boundaries, initial threats, and data-policy decisions.
 
 ## Future enhancements
 

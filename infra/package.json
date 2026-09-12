@@ -1,0 +1,19 @@
+{
+  "name": "@workload/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.269.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1141.0",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.3"
+  }
+}

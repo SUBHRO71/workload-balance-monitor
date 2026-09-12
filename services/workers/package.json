@@ -1,0 +1,19 @@
+{
+  "name": "@workload/workers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --platform node --target node24 --out-dir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@workload/backend-core": "workspace:*",
+    "@workload/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.159",
+    "tsup": "^8.5.0",
+    "typescript": "~6.0.3"
+  }
+}

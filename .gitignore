@@ -23,3 +23,9 @@ Thumbs.db
 # Local tooling
 .idea/
 .vscode/
+
+# TypeScript and local package caches
+*.tsbuildinfo
+.pnpm-store/
+playwright-report/
+test-results/
