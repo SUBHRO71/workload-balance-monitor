@@ -85,6 +85,15 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Seeded matching active organization memberships, default-off consent records, organization policy, and one manager/team assignment in the development DynamoDB table.
 - Credentials are intentionally not stored in Git; provide them only through the secure handoff to the developer. Passwords should be rotated before any shared use.
 
+### 2026-09-13 — CORS x-org-id preflight fix
+
+- Every live workspace call sends `x-org-id` so the API can resolve the caller's organization context without trusting a body parameter. The CORS `corsPreflight.allowHeaders` list was missing that header, so browsers would reject the preflight before the Lambda ever ran. Lambda unit tests cannot catch this because they bypass API Gateway; only a synthesized-infrastructure or deployed probe can detect it.
+- Added `x-org-id` to `corsPreflight.allowHeaders` in `infra/lib/workload-monitor-stack.ts`.
+- Added a fourth test to `tests/privacy/infrastructure-boundaries.test.ts` that synthesizes the stack and asserts both `x-org-id` and `http://localhost:5173` appear in the rendered CORS configuration.
+- Full `pnpm check` passed: lint, 13 package typechecks, 18 test files / 76 tests, all builds. Committed `597a8a9` and pushed to `origin/main`.
+- Deployment confirmed: `cdk deploy WorkloadMonitorDevelopment` returned `✅ WorkloadMonitorDevelopment (no changes)` — the initial deploy from the prior session had already applied the fix; the redeployment verified stack parity with zero drift. API endpoint: `https://b7unboqbq8.execute-api.us-east-1.amazonaws.com`.
+- Restart here: hard-refresh `http://localhost:5173/app`, sign in as the synthetic member, verify task/check-in CRUD and the sharing page resolve the direct manager and create/list/revoke grants without browser CORS errors in DevTools.
+
 ### 2026-09-13 — live task/check-in and explicit manager-sharing checkpoint
 
 - Web task and check-in pages now load and mutate authenticated AWS API records instead of React-only fixture state. Consent and preferences also load/save through the API, and write failures are visible in the forms.
