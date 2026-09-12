@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Membership } from "@workload/contracts";
 
 const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
@@ -43,8 +43,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string>();
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [error, setError] = useState<string>();
+  const initializationStarted = useRef(false);
 
   useEffect(() => {
+    if (initializationStarted.current) return;
+    initializationStarted.current = true;
     let cancelled = false;
     const timeout = window.setTimeout(() => {
       if (!cancelled) {
