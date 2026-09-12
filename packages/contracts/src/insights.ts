@@ -24,7 +24,7 @@ export const aggregateResponseSchema = z.object({
 });
 
 export const observationUpdateSchema = z.object({
-  status: z.enum(["active", "dismissed", "disputed"]),
+  status: z.enum(["active", "dismissed", "disputed", "corrected"]),
 }).strict();
 
 export const correctionInputSchema = z.object({

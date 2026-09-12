@@ -11,6 +11,7 @@ import {
   notificationPreferencesSchema,
   notificationUpdateSchema,
   observationUpdateSchema,
+  pageRequestSchema,
   privateItemInputSchema,
   privateItemUpdateSchema,
   profileUpdateSchema,
@@ -125,9 +126,8 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     // Tasks CRUD
     if (path === "/v1/me/tasks") {
       if (method === "GET") {
-        const limit = event.queryStringParameters?.limit ? Number(event.queryStringParameters.limit) : 50;
-        const cursor = event.queryStringParameters?.cursor;
-        const result = await store.listTasks(orgId, caller.userId, limit, cursor);
+        const page = pageRequestSchema.parse(event.queryStringParameters ?? {});
+        const result = await store.listTasks(orgId, caller.userId, page.limit, page.cursor);
         return json(200, result);
       }
       if (method === "POST") {
@@ -161,9 +161,8 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     // Check-ins CRUD
     if (path === "/v1/me/check-ins") {
       if (method === "GET") {
-        const limit = event.queryStringParameters?.limit ? Number(event.queryStringParameters.limit) : 50;
-        const cursor = event.queryStringParameters?.cursor;
-        const result = await store.listCheckIns(orgId, caller.userId, limit, cursor);
+        const page = pageRequestSchema.parse(event.queryStringParameters ?? {});
+        const result = await store.listCheckIns(orgId, caller.userId, page.limit, page.cursor);
         return json(200, result);
       }
       if (method === "POST") {
@@ -197,9 +196,8 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     // Private Items CRUD
     if (path === "/v1/me/private-items") {
       if (method === "GET") {
-        const limit = event.queryStringParameters?.limit ? Number(event.queryStringParameters.limit) : 50;
-        const cursor = event.queryStringParameters?.cursor;
-        const result = await store.listPrivateItems(orgId, caller.userId, limit, cursor);
+        const page = pageRequestSchema.parse(event.queryStringParameters ?? {});
+        const result = await store.listPrivateItems(orgId, caller.userId, page.limit, page.cursor);
         return json(200, result);
       }
       if (method === "POST") {

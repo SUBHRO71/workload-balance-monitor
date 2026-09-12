@@ -332,4 +332,44 @@ describe("Phase 6: Data Lifecycle, Owner Export, Account Deletion & Retention", 
     });
     expect("success" in deleteWorkerResult).toBe(true);
   });
+
+  it("gate 7: scoped tasks export excludes other personal collections", async () => {
+    const { store } = await setupTestStore();
+    const job = await store.createExportJob(orgId, aliceId, { scope: "tasks" });
+    const download = await store.getExportDownload(orgId, aliceId, job.id);
+    expect(download.data.tasks.length).toBeGreaterThan(0);
+    expect(download.data.checkIns).toEqual([]);
+    expect(download.data.privateItems).toEqual([]);
+    expect(download.data.grants).toEqual([]);
+    expect(download.data.preferences).toBeUndefined();
+  });
+
+  it("gate 8: scoped check-ins export excludes tasks and private items", async () => {
+    const { store } = await setupTestStore();
+    const job = await store.createExportJob(orgId, aliceId, { scope: "checkins" });
+    const download = await store.getExportDownload(orgId, aliceId, job.id);
+    expect(download.data.checkIns.length).toBeGreaterThan(0);
+    expect(download.data.tasks).toEqual([]);
+    expect(download.data.privateItems).toEqual([]);
+  });
+
+  it("gate 9: shares export contains grant metadata without personal records", async () => {
+    const { store } = await setupTestStore();
+    const job = await store.createExportJob(orgId, aliceId, { scope: "shares" });
+    const download = await store.getExportDownload(orgId, aliceId, job.id);
+    expect(download.data.grants).toEqual(expect.any(Array));
+    expect(download.data.tasks).toEqual([]);
+    expect(download.data.checkIns).toEqual([]);
+    expect(download.data.privateItems).toEqual([]);
+  });
+
+  it("gate 10: all export remains owner-scoped and excludes aggregate datasets", async () => {
+    const { store } = await setupTestStore();
+    const job = await store.createExportJob(orgId, aliceId, { scope: "all" });
+    const download = await store.getExportDownload(orgId, aliceId, job.id);
+    expect(download.data.orgId).toBe(orgId);
+    expect(download.data.userId).toBe(aliceId);
+    expect(download.data).not.toHaveProperty("aggregates");
+    expect(download.data).not.toHaveProperty("iam");
+  });
 });

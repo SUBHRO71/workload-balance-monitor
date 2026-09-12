@@ -24,8 +24,8 @@ export const workloadPreferencesSchema = z.object({
   preferredCheckInDay: z.number().int().min(1).max(7).optional(),
 }).strict();
 
-export const taskUpdateSchema = taskInputSchema.partial();
-export const checkInUpdateSchema = checkInInputSchema.partial();
+export const taskUpdateSchema = taskInputSchema.partial().extend({ expectedVersion: z.number().int().positive().optional() });
+export const checkInUpdateSchema = checkInInputSchema.partial().extend({ expectedVersion: z.number().int().positive().optional() });
 export const workloadPreferencesUpdateSchema = workloadPreferencesSchema.partial();
 
 export type TaskInput = z.infer<typeof taskInputSchema>;

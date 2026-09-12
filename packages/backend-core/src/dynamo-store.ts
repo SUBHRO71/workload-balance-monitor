@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
@@ -48,6 +48,7 @@ import {
   type DeletionRequest,
   type EvidenceStrength,
   type ExportRequest,
+  type ExportScope,
   type HumanActionInput,
   type HumanActionRecord,
   type HumanActionUpdate,
@@ -124,6 +125,24 @@ function idempotencyKeyHash(idempotencyKey: string): string {
 function validateIdempotencyKey(value: string): string {
   if (!/^[A-Za-z0-9._~-]{1,128}$/.test(value)) throw new AuthorizationError("Invalid idempotency key", 400);
   return value;
+}
+
+function boundedLimit(limit: number): number {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AuthorizationError("Page limit must be an integer from 1 to 100", 400);
+  return limit;
+}
+
+function decodeCursor(cursor: string | undefined, expectedPk: string, expectedSkPrefix: string): Record<string, string> | undefined {
+  if (!cursor) return undefined;
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (typeof decoded.PK !== "string" || typeof decoded.SK !== "string" || decoded.PK !== expectedPk || !decoded.SK.startsWith(expectedSkPrefix)) {
+      throw new Error("Cursor scope mismatch");
+    }
+    return { PK: decoded.PK, SK: decoded.SK };
+  } catch {
+    throw new AuthorizationError("Cursor is invalid or belongs to another collection", 400);
+  }
 }
 
 function cleanItem<T extends Record<string, unknown>>(item: T): Record<string, unknown> {
@@ -276,11 +295,12 @@ export class WorkloadStore implements AuthorizationStore {
   }
 
   async listTasks(orgId: string, userId: string, limit = 50, cursor?: string): Promise<{ items: TaskRecord[]; nextCursor?: string }> {
+    const ownerPk = keys.privatePartition(orgId, userId);
     const result = await this.client.send(new QueryCommand({
       TableName: this.tableName, KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: { ":pk": keys.privatePartition(orgId, userId), ":sk": "TASK#" },
-      Limit: limit,
-      ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, "base64").toString("utf-8")) : undefined,
+      ExpressionAttributeValues: { ":pk": ownerPk, ":sk": "TASK#" },
+      Limit: boundedLimit(limit),
+      ExclusiveStartKey: decodeCursor(cursor, ownerPk, "TASK#"),
       ConsistentRead: true,
     }));
     const items = (result.Items ?? []).map((item) => taskRecordSchema.parse(cleanItem(item)));
@@ -299,8 +319,13 @@ export class WorkloadStore implements AuthorizationStore {
     await this.requirePersonalConsent(orgId, userId);
     const existing = await this.getTask(orgId, userId, id);
     if (!existing) throw new AuthorizationError("Task not found", 404);
+    if (patch.expectedVersion !== undefined && patch.expectedVersion !== existing.version) {
+      throw new AuthorizationError("Task version is stale", 409);
+    }
+    const changes = { ...patch };
+    delete changes.expectedVersion;
     const now = new Date().toISOString();
-    const updated: TaskRecord = taskRecordSchema.parse({ ...existing, ...patch, version: existing.version + 1, updatedAt: now });
+    const updated: TaskRecord = taskRecordSchema.parse({ ...existing, ...changes, version: existing.version + 1, updatedAt: now });
     const oldSK = `TASK#${existing.workDate}#${id}`;
     const newSK = `TASK#${updated.workDate}#${id}`;
     const lookupKey = keys.lookup(orgId, userId, "TASK", id);
@@ -369,11 +394,12 @@ export class WorkloadStore implements AuthorizationStore {
   }
 
   async listCheckIns(orgId: string, userId: string, limit = 50, cursor?: string): Promise<{ items: CheckInRecord[]; nextCursor?: string }> {
+    const ownerPk = keys.privatePartition(orgId, userId);
     const result = await this.client.send(new QueryCommand({
       TableName: this.tableName, KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: { ":pk": keys.privatePartition(orgId, userId), ":sk": "CHECKIN#" },
-      Limit: limit,
-      ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, "base64").toString("utf-8")) : undefined,
+      ExpressionAttributeValues: { ":pk": ownerPk, ":sk": "CHECKIN#" },
+      Limit: boundedLimit(limit),
+      ExclusiveStartKey: decodeCursor(cursor, ownerPk, "CHECKIN#"),
       ConsistentRead: true,
     }));
     const items = (result.Items ?? []).map((item) => checkInRecordSchema.parse(cleanItem(item)));
@@ -391,9 +417,14 @@ export class WorkloadStore implements AuthorizationStore {
   async updateCheckIn(orgId: string, userId: string, id: string, patch: CheckInUpdate): Promise<CheckInRecord> {
     const existing = await this.getCheckIn(orgId, userId, id);
     if (!existing) throw new AuthorizationError(`CheckIn ${id} not found`, 404);
+    if (patch.expectedVersion !== undefined && patch.expectedVersion !== existing.version) {
+      throw new AuthorizationError("Check-in version is stale", 409);
+    }
+    const changes = { ...patch };
+    delete changes.expectedVersion;
     const updated: CheckInRecord = checkInRecordSchema.parse({
       ...existing,
-      ...patch,
+      ...changes,
       updatedAt: new Date().toISOString(),
       version: existing.version + 1,
     });
@@ -456,11 +487,12 @@ export class WorkloadStore implements AuthorizationStore {
   }
 
   async listPrivateItems(orgId: string, userId: string, limit = 50, cursor?: string): Promise<{ items: PrivateItemRecord[]; nextCursor?: string }> {
+    const ownerPk = keys.privatePartition(orgId, userId);
     const result = await this.client.send(new QueryCommand({
       TableName: this.tableName, KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: { ":pk": keys.privatePartition(orgId, userId), ":sk": "ITEM#" },
-      Limit: limit,
-      ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, "base64").toString("utf-8")) : undefined,
+      ExpressionAttributeValues: { ":pk": ownerPk, ":sk": "ITEM#" },
+      Limit: boundedLimit(limit),
+      ExclusiveStartKey: decodeCursor(cursor, ownerPk, "ITEM#"),
       ConsistentRead: true,
     }));
     const items = (result.Items ?? []).map((item) => privateItemRecordSchema.parse(cleanItem(item)));
@@ -500,8 +532,8 @@ export class WorkloadStore implements AuthorizationStore {
     preferences: WorkloadPreferences;
   }> {
     const preferences = await this.getPreferences(orgId, userId);
-    const { items: tasks } = await this.listTasks(orgId, userId, 200);
-    const { items: checkIns } = await this.listCheckIns(orgId, userId, 200);
+    const { items: tasks } = await this.listTasks(orgId, userId, 100);
+    const { items: checkIns } = await this.listCheckIns(orgId, userId, 100);
     const points = calculateWeeklyWorkload(tasks, checkIns);
     const insights = generatePersonalInsights(points, preferences.weeklyCapacity?.value);
     const strength: EvidenceStrength = points.length >= 6 ? "consistent" : points.length >= 3 ? "developing" : "limited";
@@ -542,7 +574,16 @@ export class WorkloadStore implements AuthorizationStore {
       ...input, entityType: "CORRECTION", id, orgId, ownerId: userId,
       status: "resolved", schemaVersion: 1, version: 1, createdAt: now, updatedAt: now,
     };
+    const observation = await this.getObservation(orgId, userId, input.sourceOrObservationId);
+    if (observation) {
+      if (input.disputedVersion !== undefined && input.disputedVersion !== observation.version) {
+        throw new AuthorizationError("Observation version mismatch", 409);
+      }
+      await this.updateObservationStatus(orgId, userId, observation.id, "corrected");
+    }
     await this.client.send(new PutCommand({ TableName: this.tableName, Item: { ...keys.privateRecord(orgId, userId, `CORRECTION#${id}`), ...record } }));
+    await this.invalidateGrantsForRecord(orgId, userId, input.sourceOrObservationId);
+    await this.invalidateAggregateReleases(orgId).catch(() => {});
     await this.saveOutboxEvent(0, "personal.insight", `${orgId}#${userId}`);
     await this.saveOutboxEvent(0, "publication.invalidate", `${orgId}#${userId}`);
     return record;
@@ -1223,6 +1264,20 @@ export class WorkloadStore implements AuthorizationStore {
       TableName: this.tableName,
       Item: { ...keys.member(orgId, userId), ...updated },
     }));
+    if (existing.status !== updated.status || existing.roles.join(",") !== updated.roles.join(",")) {
+      // Membership changes must take effect against fresh backend reads even when a JWT is stale.
+      await this.invalidateAggregateReleases(orgId).catch(() => {});
+      if (existing.roles.includes("manager") && !updated.roles.includes("manager")) {
+        for (const grant of await this.listOwnerGrants(orgId, userId).catch(() => [])) {
+          if (grant.status === "active") {
+            await this.client.send(new PutCommand({
+              TableName: this.tableName,
+              Item: { ...keys.grant(orgId, grant.id), ...grant, status: "invalidated", version: grant.version + 1, updatedAt: new Date().toISOString() },
+            })).catch(() => {});
+          }
+        }
+      }
+    }
     await this.logAdminAudit(
       orgId,
       actor.userId,
@@ -1241,12 +1296,15 @@ export class WorkloadStore implements AuthorizationStore {
     actorEmail?: string,
   ): Promise<InvitationRecord> {
     const invitationId = `inv_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(token).digest("hex");
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const record: InvitationRecord = {
       id: invitationId,
       orgId,
       email: input.email,
+      token,
       roles: input.roles,
       teamId: input.teamId,
       directManagerId: input.directManagerId,
@@ -1256,7 +1314,7 @@ export class WorkloadStore implements AuthorizationStore {
     };
     await this.client.send(new PutCommand({
       TableName: this.tableName,
-      Item: { ...keys.invitation(orgId, invitationId), ...record },
+      Item: { ...keys.invitation(orgId, invitationId), ...record, token: undefined, tokenHash },
     }));
     await this.logAdminAudit(
       orgId,
@@ -1277,7 +1335,11 @@ export class WorkloadStore implements AuthorizationStore {
       ExpressionAttributeValues: { ":pk": prefix.PK, ":sk": prefix.SK },
       ConsistentRead: true,
     }));
-    return (result.Items ?? []).map((item) => invitationRecordSchema.parse(cleanItem(item)));
+    return (result.Items ?? []).map((item) => {
+      const cleaned = cleanItem(item);
+      delete cleaned.tokenHash;
+      return invitationRecordSchema.parse(cleaned);
+    });
   }
 
   async acceptInvitation(
@@ -1292,14 +1354,22 @@ export class WorkloadStore implements AuthorizationStore {
     }))).Item;
     if (!inviteItem) throw new AuthorizationError("Invitation not found", 404);
     const invite = invitationRecordSchema.parse(cleanItem(inviteItem));
+    if (invite.status === "accepted" && invite.acceptedBy === user.userId) {
+      const existingMembership = await this.getMembership(orgId, user.userId);
+      if (existingMembership) return existingMembership;
+    }
     if (invite.status !== "pending" || new Date(invite.expiresAt).getTime() <= Date.now()) {
       throw new AuthorizationError("Invitation is no longer valid or has expired", 400);
     }
+    if (invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
+      throw new AuthorizationError("Invitation is addressed to a different verified account", 403);
+    }
+    if (invite.tokenHash) {
+      if (!input.token) throw new AuthorizationError("Invitation token is required", 400);
+      const presentedHash = createHash("sha256").update(input.token).digest("hex");
+      if (presentedHash !== invite.tokenHash) throw new AuthorizationError("Invitation token is invalid", 403);
+    }
     const now = new Date().toISOString();
-    await this.client.send(new PutCommand({
-      TableName: this.tableName,
-      Item: { ...inviteItem, status: "accepted", acceptedAt: now, acceptedBy: user.userId },
-    }));
     const membership: Membership = {
       orgId,
       userId: user.userId,
@@ -1309,13 +1379,12 @@ export class WorkloadStore implements AuthorizationStore {
       status: "active",
       membershipVersion: 1,
     };
-    await this.client.send(new PutCommand({
-      TableName: this.tableName,
-      Item: { ...keys.member(orgId, user.userId), ...membership },
-    }));
-    await this.client.send(new PutCommand({
-      TableName: this.tableName,
-      Item: { PK: `IDENTITY#USER#${user.userId}`, SK: `ORG#${orgId}`, orgId, active: true },
+    await this.client.send(new TransactWriteCommand({
+      TransactItems: [
+        { Put: { TableName: this.tableName, Item: { ...inviteItem, token: undefined, status: "accepted", acceptedAt: now, acceptedBy: user.userId }, ConditionExpression: "#status = :pending", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":pending": "pending" } } },
+        { Put: { TableName: this.tableName, Item: { ...keys.member(orgId, user.userId), ...membership } } },
+        { Put: { TableName: this.tableName, Item: { PK: `IDENTITY#USER#${user.userId}`, SK: `ORG#${orgId}`, orgId, active: true } } },
+      ],
     }));
     if (invite.teamId) {
       await this.assignTeamMember(
@@ -1710,16 +1779,20 @@ export class WorkloadStore implements AuthorizationStore {
     return (result.Items ?? []).map((item) => correctionRecordSchema.parse(cleanItem(item)));
   }
 
-  async compileOwnerExportData(orgId: string, userId: string, exportId: string, downloadExpiresAt: string): Promise<OwnerExportData> {
+  async compileOwnerExportData(orgId: string, userId: string, exportId: string, downloadExpiresAt: string, scope: ExportScope = "all"): Promise<OwnerExportData> {
     const preferences = await this.getPreferences(orgId, userId).catch(() => undefined);
     const consent = await this.getConsent(orgId, userId).catch(() => undefined);
-    const { items: tasks } = await this.listTasks(orgId, userId, 1000);
-    const { items: checkIns } = await this.listCheckIns(orgId, userId, 1000);
-    const { items: privateItems } = await this.listPrivateItems(orgId, userId, 1000);
-    const observations = await this.listObservations(orgId, userId);
-    const corrections = await this.listCorrections(orgId, userId);
-    const grants = await this.listOwnerGrants(orgId, userId);
-    const notifications = await this.listNotifications(orgId, userId);
+    const includePersonal = scope === "all" || scope === "personal_records";
+    const includeTasks = includePersonal || scope === "tasks";
+    const includeCheckIns = includePersonal || scope === "checkins";
+    const includeShares = scope === "all" || scope === "shares";
+    const { items: tasks } = includeTasks ? await this.listTasks(orgId, userId, 100) : { items: [] };
+    const { items: checkIns } = includeCheckIns ? await this.listCheckIns(orgId, userId, 100) : { items: [] };
+    const { items: privateItems } = includePersonal ? await this.listPrivateItems(orgId, userId, 100) : { items: [] };
+    const observations = includePersonal ? await this.listObservations(orgId, userId) : [];
+    const corrections = includePersonal ? await this.listCorrections(orgId, userId) : [];
+    const grants = includeShares ? await this.listOwnerGrants(orgId, userId) : [];
+    const notifications = includePersonal ? await this.listNotifications(orgId, userId) : [];
 
     const exportData: OwnerExportData = {
       exportId,
@@ -1732,8 +1805,8 @@ export class WorkloadStore implements AuthorizationStore {
         notice: "This archive contains strictly your personal workload records. In accordance with privacy architecture, no other employees' records or raw aggregate datasets are included.",
         downloadExpiresAt,
       },
-      ...(preferences ? { preferences } : {}),
-      ...(consent ? { consent } : {}),
+      ...(includePersonal && preferences ? { preferences } : {}),
+      ...(includePersonal && consent ? { consent } : {}),
       tasks,
       checkIns,
       privateItems,
@@ -1769,7 +1842,7 @@ export class WorkloadStore implements AuthorizationStore {
       updatedAt: now.toISOString(),
     };
 
-    const exportData = await this.compileOwnerExportData(orgId, userId, jobId, expiresAt);
+    const exportData = await this.compileOwnerExportData(orgId, userId, jobId, expiresAt, validated.scope);
 
     await this.client.send(new PutCommand({
       TableName: this.tableName,
@@ -1818,7 +1891,8 @@ export class WorkloadStore implements AuthorizationStore {
     if (result.Item.exportPayload && typeof result.Item.exportPayload === "string") {
       exportData = JSON.parse(result.Item.exportPayload) as OwnerExportData;
     } else {
-      exportData = await this.compileOwnerExportData(orgId, userId, jobId, job.expiresAt);
+      const scope = exportRequestSchema.parse({ scope: job.scope }).scope;
+      exportData = await this.compileOwnerExportData(orgId, userId, jobId, job.expiresAt, scope);
     }
     return { job, data: exportData };
   }
@@ -1966,7 +2040,7 @@ export class WorkloadStore implements AuthorizationStore {
   }
 
   async cleanupExpiredPrivateItems(orgId: string, userId: string, now = new Date()): Promise<number> {
-    const { items } = await this.listPrivateItems(orgId, userId, 1000);
+    const { items } = await this.listPrivateItems(orgId, userId, 100);
     let prunedCount = 0;
     const nowIso = now.toISOString();
 

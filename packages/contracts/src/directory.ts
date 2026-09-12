@@ -32,17 +32,22 @@ export const invitationRecordSchema = z.object({
   id: idSchema,
   orgId: idSchema,
   email: z.string().email(),
+  token: z.string().min(16).max(256).optional(),
+  tokenHash: z.string().length(64).regex(/^[a-f0-9]+$/).optional(),
   roles: z.array(organizationRoleSchema).min(1),
   teamId: idSchema.optional(),
   directManagerId: idSchema.optional(),
   status: z.enum(["pending", "accepted", "revoked", "expired"]),
   expiresAt: isoDateTimeSchema,
   createdAt: isoDateTimeSchema,
+  acceptedAt: isoDateTimeSchema.optional(),
+  acceptedBy: idSchema.optional(),
 }).strict();
 
 export const acceptInvitationInputSchema = z.object({
   invitationId: idSchema,
   displayName: z.string().trim().min(1).max(120),
+  token: z.string().min(16).max(256).optional(),
 }).strict();
 
 export const teamInputSchema = z.object({
@@ -92,4 +97,3 @@ export type TeamRecord = z.infer<typeof teamRecordSchema>;
 export type MemberUpdate = z.infer<typeof memberUpdateSchema>;
 export type PolicyPatch = z.infer<typeof policyPatchSchema>;
 export type AdminAuditRecord = z.infer<typeof adminAuditRecordSchema>;
-
