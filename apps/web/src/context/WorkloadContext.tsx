@@ -45,7 +45,7 @@ interface WorkloadContextType {
 }
 
 const defaultConsent: ConsentScopes = {
-  personalProcessing: true, // In demo mode, start with true for interactive exploration
+  personalProcessing: false,
   teamAggregation: false,
   organizationAggregation: false,
   notifications: { inApp: false, managerEmail: false, devicePush: false },

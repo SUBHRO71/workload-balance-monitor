@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
@@ -110,6 +110,21 @@ import {
 import { keys } from "./keys";
 
 export interface DynamoEntity { PK: string; SK: string; version?: number; [key: string]: NativeAttributeValue | undefined }
+
+function requestFingerprint(operation: string, idempotencyKey: string, input: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ operation, idempotencyKey, input }))
+    .digest("hex");
+}
+
+function idempotencyKeyHash(idempotencyKey: string): string {
+  return createHash("sha256").update(idempotencyKey).digest("hex");
+}
+
+function validateIdempotencyKey(value: string): string {
+  if (!/^[A-Za-z0-9._~-]{1,128}$/.test(value)) throw new AuthorizationError("Invalid idempotency key", 400);
+  return value;
+}
 
 function cleanItem<T extends Record<string, unknown>>(item: T): Record<string, unknown> {
   const rest = { ...item };
@@ -228,8 +243,18 @@ export class WorkloadStore implements AuthorizationStore {
     return updated;
   }
 
-  async createTask(orgId: string, userId: string, input: TaskInput): Promise<TaskRecord> {
+  async createTask(orgId: string, userId: string, input: TaskInput, idempotencyKey?: string): Promise<TaskRecord> {
     await this.requirePersonalConsent(orgId, userId);
+    const requestKey = idempotencyKey ? validateIdempotencyKey(idempotencyKey) : undefined;
+    const requestHash = requestKey ? requestFingerprint("create-task", requestKey, input) : undefined;
+    const requestKeyHash = requestKey ? idempotencyKeyHash(requestKey) : undefined;
+    if (requestKey && requestHash && requestKeyHash) {
+      const previous = await this.client.send(new GetCommand({ TableName: this.tableName, Key: keys.idempotency(orgId, userId, requestKeyHash), ConsistentRead: true }));
+      if (previous.Item) {
+        if (previous.Item.requestHash !== requestHash) throw new AuthorizationError("Idempotency key was reused with different input", 409);
+        return taskRecordSchema.parse(previous.Item.result);
+      }
+    }
     const id = `task-${randomUUID()}`;
     const now = new Date().toISOString();
     const task: TaskRecord = {
@@ -238,13 +263,15 @@ export class WorkloadStore implements AuthorizationStore {
     };
     const taskKey = keys.privateRecord(orgId, userId, `TASK#${input.workDate}#${id}`);
     const lookupKey = keys.lookup(orgId, userId, "TASK", id);
+    const outbox = this.buildOutboxItem(0, "personal.insight", `${orgId}#${userId}`);
     await this.client.send(new TransactWriteCommand({
       TransactItems: [
         { Put: { TableName: this.tableName, Item: { ...taskKey, ...task } } },
         { Put: { TableName: this.tableName, Item: { ...lookupKey, targetSK: taskKey.SK, id, workDate: input.workDate } } },
+        ...(requestKey && requestHash && requestKeyHash ? [{ Put: { TableName: this.tableName, Item: { ...keys.idempotency(orgId, userId, requestKeyHash), entityType: "IDEMPOTENCY", operation: "create-task", requestHash, result: task, createdAt: now }, ConditionExpression: "attribute_not_exists(PK)" } }] : []),
+        { Put: { TableName: this.tableName, Item: outbox } },
       ],
     }));
-    await this.saveOutboxEvent(0, "personal.insight", `${orgId}#${userId}`);
     return task;
   }
 
@@ -309,8 +336,18 @@ export class WorkloadStore implements AuthorizationStore {
     await this.invalidateGrantsForRecord(orgId, userId, id);
   }
 
-  async createCheckIn(orgId: string, userId: string, input: CheckInInput): Promise<CheckInRecord> {
+  async createCheckIn(orgId: string, userId: string, input: CheckInInput, idempotencyKey?: string): Promise<CheckInRecord> {
     await this.requirePersonalConsent(orgId, userId);
+    const requestKey = idempotencyKey ? validateIdempotencyKey(idempotencyKey) : undefined;
+    const requestHash = requestKey ? requestFingerprint("create-check-in", requestKey, input) : undefined;
+    const requestKeyHash = requestKey ? idempotencyKeyHash(requestKey) : undefined;
+    if (requestKey && requestHash && requestKeyHash) {
+      const previous = await this.client.send(new GetCommand({ TableName: this.tableName, Key: keys.idempotency(orgId, userId, requestKeyHash), ConsistentRead: true }));
+      if (previous.Item) {
+        if (previous.Item.requestHash !== requestHash) throw new AuthorizationError("Idempotency key was reused with different input", 409);
+        return checkInRecordSchema.parse(previous.Item.result);
+      }
+    }
     const id = `checkin-${randomUUID()}`;
     const now = new Date().toISOString();
     const checkIn: CheckInRecord = {
@@ -319,13 +356,15 @@ export class WorkloadStore implements AuthorizationStore {
     };
     const checkInKey = keys.privateRecord(orgId, userId, `CHECKIN#${input.checkInDate}#${id}`);
     const lookupKey = keys.lookup(orgId, userId, "CHECKIN", id);
+    const outbox = this.buildOutboxItem(0, "personal.insight", `${orgId}#${userId}`);
     await this.client.send(new TransactWriteCommand({
       TransactItems: [
         { Put: { TableName: this.tableName, Item: { ...checkInKey, ...checkIn } } },
         { Put: { TableName: this.tableName, Item: { ...lookupKey, targetSK: checkInKey.SK, id, checkInDate: input.checkInDate } } },
+        ...(requestKey && requestHash && requestKeyHash ? [{ Put: { TableName: this.tableName, Item: { ...keys.idempotency(orgId, userId, requestKeyHash), entityType: "IDEMPOTENCY", operation: "create-check-in", requestHash, result: checkIn, createdAt: now }, ConditionExpression: "attribute_not_exists(PK)" } }] : []),
+        { Put: { TableName: this.tableName, Item: outbox } },
       ],
     }));
-    await this.saveOutboxEvent(0, "personal.insight", `${orgId}#${userId}`);
     return checkIn;
   }
 
@@ -510,15 +549,19 @@ export class WorkloadStore implements AuthorizationStore {
   }
 
   async saveOutboxEvent(shard: number, jobType: string, targetId: string, schemaVersion = 1): Promise<void> {
-    const timestamp = new Date().toISOString();
-    const eventId = randomUUID();
     await this.client.send(new PutCommand({
       TableName: this.tableName,
-      Item: {
-        ...keys.outbox(shard, timestamp, eventId),
-        entityType: "OUTBOX_EVENT", jobId: eventId, jobType, targetId, schemaVersion, createdAt: timestamp,
-      },
+      Item: this.buildOutboxItem(shard, jobType, targetId, schemaVersion),
     }));
+  }
+
+  private buildOutboxItem(shard: number, jobType: string, targetId: string, schemaVersion = 1): DynamoEntity {
+    const timestamp = new Date().toISOString();
+    const eventId = randomUUID();
+    return {
+      ...keys.outbox(shard, timestamp, eventId),
+      entityType: "OUTBOX_EVENT", jobId: eventId, jobType, targetId, schemaVersion, createdAt: timestamp,
+    };
   }
 
   async createSharePreview(orgId: string, userId: string, input: SharingGrantInput): Promise<Publication> {
@@ -1936,4 +1979,3 @@ export class WorkloadStore implements AuthorizationStore {
     return prunedCount;
   }
 }
-

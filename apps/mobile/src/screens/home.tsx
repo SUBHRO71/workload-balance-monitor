@@ -19,7 +19,7 @@ export function HomeScreen() {
 
   // Consent scopes (default off per policy, interactive in app)
   const [consent, setConsent] = useState<ConsentScopes>({
-    personalProcessing: true,
+    personalProcessing: false,
     teamAggregation: false,
     organizationAggregation: false,
     notifications: { inApp: false, managerEmail: false, devicePush: false },

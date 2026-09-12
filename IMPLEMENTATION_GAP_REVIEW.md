@@ -1,5 +1,7 @@
 # Implementation and Test Gap Review
 
+> Start with [the refined gap review and execution checklist](GAP_EXECUTION_README.md), updated against `409757f`. This original review remains as historical evidence for commit `f9ab28e`; its UI and policy descriptions must not be used as current acceptance criteria.
+
 Review date: 2026-09-13  
 Reviewed commit: `f9ab28ef85e7ce8e3b879f2d84e8062b0c612c17` (`docs: mark phase 6 complete and update delivery status in README`)  
 Requirements source: the root `README.md`, especially Sections 1-5, 8, and 10

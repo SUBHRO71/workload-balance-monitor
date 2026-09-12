@@ -132,7 +132,9 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
       }
       if (method === "POST") {
         const input = parseBody(event.body, taskInputSchema);
-        const created = await store.createTask(orgId, caller.userId, input);
+        const idempotencyKey = event.headers?.["idempotency-key"] ?? event.headers?.["Idempotency-Key"];
+        if (!idempotencyKey) throw new AuthorizationError("Idempotency-Key header is required", 400);
+        const created = await store.createTask(orgId, caller.userId, input, idempotencyKey);
         return json(201, created);
       }
     }
@@ -166,7 +168,9 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
       }
       if (method === "POST") {
         const input = parseBody(event.body, checkInInputSchema);
-        const created = await store.createCheckIn(orgId, caller.userId, input);
+        const idempotencyKey = event.headers?.["idempotency-key"] ?? event.headers?.["Idempotency-Key"];
+        if (!idempotencyKey) throw new AuthorizationError("Idempotency-Key header is required", 400);
+        const created = await store.createCheckIn(orgId, caller.userId, input, idempotencyKey);
         return json(201, created);
       }
     }
@@ -377,4 +381,3 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     return json(500, { code: "INTERNAL_ERROR", message: "Request failed." });
   }
 };
-

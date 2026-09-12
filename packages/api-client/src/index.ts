@@ -64,13 +64,14 @@ export class ApiError extends Error {
 export class WorkloadApiClient {
   constructor(private readonly config: ApiClientConfiguration) {}
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, options?: { idempotencyKey?: string }): Promise<T> {
     const token = await this.config.getAccessToken();
     const headers: Record<string, string> = {
       "content-type": "application/json",
     };
     if (token) headers.authorization = `Bearer ${token}`;
     if (this.config.orgId) headers["x-org-id"] = this.config.orgId;
+    if (options?.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
 
     const url = `${this.config.baseUrl.replace(/\/$/, "")}${path}`;
     const init: RequestInit = {
@@ -148,8 +149,8 @@ export class WorkloadApiClient {
     return this.request("GET", `/v1/me/tasks${query}`);
   }
 
-  async createTask(input: TaskInput): Promise<TaskRecord> {
-    return this.request("POST", "/v1/me/tasks", input);
+  async createTask(input: TaskInput, idempotencyKey: string): Promise<TaskRecord> {
+    return this.request("POST", "/v1/me/tasks", input, { idempotencyKey });
   }
 
   async getTask(id: string): Promise<TaskRecord> {
@@ -173,8 +174,8 @@ export class WorkloadApiClient {
     return this.request("GET", `/v1/me/check-ins${query}`);
   }
 
-  async createCheckIn(input: CheckInInput): Promise<CheckInRecord> {
-    return this.request("POST", "/v1/me/check-ins", input);
+  async createCheckIn(input: CheckInInput, idempotencyKey: string): Promise<CheckInRecord> {
+    return this.request("POST", "/v1/me/check-ins", input, { idempotencyKey });
   }
 
   async getCheckIn(id: string): Promise<CheckInRecord> {
@@ -419,4 +420,3 @@ export class WorkloadApiClient {
     return this.request("GET", `/v1/me/jobs/${jobId}`);
   }
 }
-
