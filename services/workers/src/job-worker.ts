@@ -9,7 +9,7 @@ const store = tableName ? new WorkloadStore(tableName) : undefined;
 export const handler: SQSHandler = async (event) => {
   if (!store) throw new Error("TABLE_NAME is required");
   for (const record of event.Records) {
-    let payload: { jobType: string; targetId: string };
+    let payload: { jobType: string; targetId: string; expectedDisclosureGeneration?: number };
     try {
       payload = JSON.parse(record.body) as { jobType: string; targetId: string };
     } catch {

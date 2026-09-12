@@ -5,6 +5,7 @@ export interface AggregateJobPayload {
   jobType: "team.aggregate" | "org.aggregate" | "publication.invalidate";
   targetId: string;
   range?: DateRange;
+  expectedDisclosureGeneration?: number;
 }
 
 export async function processAggregateJob(
@@ -15,6 +16,15 @@ export async function processAggregateJob(
     from: "2026-03-01",
     to: "2026-03-07",
   };
+
+  if (payload.expectedDisclosureGeneration !== undefined && payload.jobType !== "publication.invalidate") {
+    const orgId = payload.targetId.split("#")[0];
+    if (!orgId) throw new Error("Invalid aggregate target");
+    const policy = await store.getOrganizationPolicy(orgId);
+    if (policy.disclosureGeneration !== payload.expectedDisclosureGeneration) {
+      return { state: "invalid", range: defaultRange, evidenceStrength: "limited", reason: "Stale disclosure generation discarded" };
+    }
+  }
 
   if (payload.jobType === "team.aggregate") {
     const [orgId, teamId] = payload.targetId.split("#");

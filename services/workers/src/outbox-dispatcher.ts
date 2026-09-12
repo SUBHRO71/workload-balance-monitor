@@ -12,7 +12,15 @@ export const handler: DynamoDBStreamHandler = async (event) => {
     const jobType = record.dynamodb.NewImage.jobType?.S;
     const targetId = record.dynamodb.NewImage.targetId?.S;
     const schemaVersion = record.dynamodb.NewImage.schemaVersion?.N;
+    const expectedDisclosureGeneration = record.dynamodb.NewImage.expectedDisclosureGeneration?.N;
     if (!jobId || !jobType || !targetId || !schemaVersion) throw new Error("Outbox event is missing safe job metadata");
-    await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify({ jobId, jobType, targetId, schemaVersion: Number(schemaVersion) }) }));
+    await sqs.send(new SendMessageCommand({
+      QueueUrl: queueUrl,
+      MessageBody: JSON.stringify({
+        jobId, jobType, targetId, schemaVersion: Number(schemaVersion),
+        ...(expectedDisclosureGeneration ? { expectedDisclosureGeneration: Number(expectedDisclosureGeneration) } : {}),
+      }),
+      ...(queueUrl.endsWith(".fifo") ? { MessageDeduplicationId: jobId, MessageGroupId: "workload-jobs" } : {}),
+    }));
   }
 };

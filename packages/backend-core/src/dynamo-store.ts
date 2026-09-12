@@ -1943,7 +1943,7 @@ export class WorkloadStore implements AuthorizationStore {
     };
 
     // Synchronously execute full deletion cascade
-    await this.executeDeletion(orgId, userId, jobId);
+    await this.executeDeletion(orgId, userId, jobId, validated.scope);
 
     // Save deletion job record so caller can see completion
     await this.client.send(new PutCommand({
@@ -1958,11 +1958,11 @@ export class WorkloadStore implements AuthorizationStore {
     return record;
   }
 
-  async executeDeletion(orgId: string, userId: string, _jobId?: string): Promise<{ success: boolean; deletedCount: number }> {
+  async executeDeletion(orgId: string, userId: string, _jobId?: string, scope: DeletionRequest["scope"] = "all"): Promise<{ success: boolean; deletedCount: number }> {
     let deletedCount = 0;
 
     // 1. Revoke and purge all owner grants, publications, and recipient inbox pointers
-    const grants = await this.listOwnerGrants(orgId, userId);
+    const grants = scope === "personal_records" ? [] : await this.listOwnerGrants(orgId, userId);
     for (const grant of grants) {
       await this.revokeGrant(orgId, userId, grant.id).catch(() => {});
       await this.client.send(new DeleteCommand({
@@ -1980,12 +1980,15 @@ export class WorkloadStore implements AuthorizationStore {
       deletedCount += 3;
     }
 
-    await this.client.send(new DeleteCommand({
+    if (scope !== "personal_records") await this.client.send(new DeleteCommand({
       TableName: this.tableName,
       Key: keys.shareGate(orgId, userId),
     })).catch(() => {});
 
+    if (scope === "shares") return { success: true, deletedCount };
+
     // 2. Cascade Invalidation of affected Team and Org Aggregate Releases
+    if (scope === "all") {
     const assignments = await this.getActiveAssignmentsForUser(orgId, userId).catch(() => []);
     for (const assignment of assignments) {
       await this.invalidateAggregateReleases(orgId, assignment.teamId).catch(() => {});
@@ -2001,9 +2004,10 @@ export class WorkloadStore implements AuthorizationStore {
       TableName: this.tableName,
       Key: { PK: keys.userTeams(orgId, userId).PK, SK: "TEAM#" },
     })).catch(() => {});
+    }
 
     // 3. Mark member inactive in directory
-    const existingMember = await this.getMembership(orgId, userId).catch(() => undefined);
+    const existingMember = scope === "all" ? await this.getMembership(orgId, userId).catch(() => undefined) : undefined;
     if (existingMember) {
       await this.client.send(new PutCommand({
         TableName: this.tableName,
@@ -2017,7 +2021,7 @@ export class WorkloadStore implements AuthorizationStore {
     }
 
     // 4. Delete user identity pointer
-    await this.client.send(new DeleteCommand({
+    if (scope === "all") await this.client.send(new DeleteCommand({
       TableName: this.tableName,
       Key: { PK: `IDENTITY#USER#${userId}`, SK: `ORG#${orgId}` },
     })).catch(() => {});
@@ -2041,6 +2045,7 @@ export class WorkloadStore implements AuthorizationStore {
     }
 
     // 6. Purge notifications
+    if (scope === "all") {
     const notifications = await this.listNotifications(orgId, userId).catch(() => []);
     for (const notif of notifications) {
       await this.client.send(new DeleteCommand({
@@ -2053,6 +2058,7 @@ export class WorkloadStore implements AuthorizationStore {
       TableName: this.tableName,
       Key: keys.notificationPreferences(orgId, userId),
     })).catch(() => {});
+    }
 
     // 7. Log content-free administrative audit
     await this.logAdminAudit(orgId, "system", "delete_account", userId, {
