@@ -126,16 +126,19 @@ export class WorkloadMonitorStack extends Stack {
       },
     });
     const jwtAuthorizer = new authorizers.HttpJwtAuthorizer("CognitoJwt", `https://cognito-idp.${this.region}.${this.urlSuffix}/${userPool.userPoolId}`, { jwtAudience: [webClient.userPoolClientId, mobileClient.userPoolClientId] });
-    httpApi.addRoutes({ path: "/health", methods: [apigatewayv2.HttpMethod.GET], integration: new integrations.HttpLambdaIntegration("HealthIntegration", healthFunction) });
-    httpApi.addRoutes({ path: "/v1/me", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("PersonalRootIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/me/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("PersonalProxyIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/invitations/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("InvitationsProxyIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/manager", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkManagerRootIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/manager/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkManagerProxyIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/hr", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkHrRootIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/hr/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkHrProxyIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/admin", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("AdminRootIntegration", adminFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
-    httpApi.addRoutes({ path: "/v1/admin/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("AdminProxyIntegration", adminFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    const healthIntegration = new integrations.HttpLambdaIntegration("HealthIntegration", healthFunction);
+    const authenticatedMethods = [apigatewayv2.HttpMethod.GET, apigatewayv2.HttpMethod.POST, apigatewayv2.HttpMethod.PUT, apigatewayv2.HttpMethod.PATCH, apigatewayv2.HttpMethod.DELETE];
+    httpApi.addRoutes({ path: "/health", methods: [apigatewayv2.HttpMethod.GET], integration: healthIntegration });
+    const corsPaths = ["/v1/me", "/v1/me/{proxy+}", "/v1/invitations/{proxy+}", "/v1/manager", "/v1/manager/{proxy+}", "/v1/hr", "/v1/hr/{proxy+}", "/v1/admin", "/v1/admin/{proxy+}"];
+    for (const [index, path] of corsPaths.entries()) {
+      httpApi.addRoutes({ path, methods: [apigatewayv2.HttpMethod.OPTIONS], integration: healthIntegration });
+      const integration = path.startsWith("/v1/me") || path.startsWith("/v1/invitations")
+        ? new integrations.HttpLambdaIntegration(`PersonalIntegration${index}`, personalFunction)
+        : path.startsWith("/v1/admin")
+          ? new integrations.HttpLambdaIntegration(`AdminIntegration${index}`, adminFunction)
+          : new integrations.HttpLambdaIntegration(`WorkIntegration${index}`, workFunction);
+      httpApi.addRoutes({ path, methods: authenticatedMethods, integration, authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    }
 
     const schedulerRole = new iam.Role(this, "WeeklyAggregationSchedulerRole", {
       assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),

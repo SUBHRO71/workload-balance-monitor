@@ -37,9 +37,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        setError("Sign-in timed out. Please try again.");
+        setLoading(false);
+      }
+    }, 15000);
     const initialize = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
+        const oauthError = params.get("error_description") ?? params.get("error");
+        if (oauthError) throw new Error(`Sign-in was declined: ${oauthError}`);
         const code = params.get("code");
         if (code) {
           const tokens = await exchangeCode(code);
@@ -62,11 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionStorage.removeItem("workload.idToken");
         if (!cancelled) setError(caught instanceof Error ? caught.message : "Sign-in failed");
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setLoading(false);
       }
     };
     void initialize();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(timeout); };
   }, []);
 
   const value = useMemo<AuthState>(() => ({

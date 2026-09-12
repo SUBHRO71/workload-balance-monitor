@@ -192,7 +192,6 @@ function DashboardRoute() {
   const [activeTab, setActiveTab] = useState<NavTab>(initialTab);
 
   if (auth.loading) return <AuthLoading />;
-  if (window.location.pathname === "/auth/callback") return <AuthLoading message="Completing sign-in…" />;
   if (!auth.authenticated) return <LoginPage />;
 
   const activeMembership = auth.memberships.find((membership) => membership.status === "active");
