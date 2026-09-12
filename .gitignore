@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.expo/
+cdk.out/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local tooling
+.idea/
+.vscode/
