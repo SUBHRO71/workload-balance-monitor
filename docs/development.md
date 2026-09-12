@@ -23,7 +23,7 @@ pnpm infra:synth
 
 `build` builds the web application and bundles backend entry points. It does not build native binaries. Use `pnpm --filter @workload/mobile exec expo export --platform android --platform ios` for a JavaScript bundle check. Device tests and store builds remain separate.
 
-No AWS credentials are needed for the starter screens, unit tests, or empty-stack synthesis. Environment examples contain only public configuration names, are unused by the starter screens, and must never contain secrets.
+AWS credentials are not needed for the starter screens or unit tests. CDK synthesis can use explicit test account/region context; diff and deployment require authorized AWS credentials. Environment examples contain only public configuration names, are unused by the starter screens, and must never contain secrets.
 
 Shared packages export TypeScript source, which Vite, Metro and backend bundlers consume. Their current check is TypeScript validation. Add packages with `pnpm --filter <workspace-name> add <package>`; add Expo runtime libraries using `pnpm --filter @workload/mobile exec expo install <package>`.
 

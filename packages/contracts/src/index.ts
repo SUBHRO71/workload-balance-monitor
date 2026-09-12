@@ -1,9 +1,7 @@
-import { z } from "zod";
-
-export const consentSchema = z.object({
-  personalProcessing: z.boolean().default(false),
-  teamAggregation: z.boolean().default(false),
-  notifications: z.boolean().default(false),
-}).strict();
-
-export type ConsentScopes = z.infer<typeof consentSchema>;
+export * from "./common";
+export * from "./consent";
+export * from "./directory";
+export * from "./insights";
+export * from "./private-item";
+export * from "./sharing";
+export * from "./workload";

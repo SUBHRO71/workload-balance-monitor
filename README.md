@@ -2,7 +2,7 @@
 
 **Track:** Workforce, Productivity & Digital Life
 
-**Status:** Product specification with a working monorepo scaffold. The dashboards, authorization rules, APIs, and database below are planned; they are not implemented or deployed yet.
+**Status:** Phase 0 is complete. The Phase 1 development foundation is implemented and deployed in `us-east-1`; personal data-entry pages and CRUD APIs begin in Phase 2. No real employee data should be loaded yet.
 
 A private workspace for people to understand their workload and decide what to share. Everyone, including managers and HR staff, has a personal dashboard. Direct managers can view only items deliberately shared with them and eligible team aggregates. HR sees eligible organization aggregates only. Personal records remain until their owner deletes them, except explicitly dated one-time private items, which expire after one year.
 
@@ -11,6 +11,16 @@ A private workspace for people to understand their workload and decide what to s
 ## 1. Product and data
 
 Operational defaults labeled **proposed** must be finalized before live deployment.
+
+### Delivery progress
+
+- [x] **Phase 0 — contracts, domain rules, and synthetic fixtures.** Runtime schemas cover separate consent scopes, tasks, check-ins, private items, directory records, expiring direct-manager grants, frozen publications, evidence-strength responses, and suppression states. Pure functions calculate weekly personal trends, explainable observations, one-time-item retention, minimum-five aggregation, and successive-release overlap suppression. Seeded fixtures are synthetic and deterministic.
+- [x] **Phase 1 — development cloud and backend foundation.** Cognito identity, DynamoDB persistence primitives, current-membership authorization, direct-manager/reporting-line checks, namespace-scoped IAM, HTTP API JWT authorization, identifier-only outbox dispatch, SQS/DLQ, private export storage, logs, and a disabled weekly schedule are deployed in the development stack.
+- [ ] **Phase 2 — personal web/mobile journeys.** Build onboarding, consent, task/check-in/private-item CRUD, personal dashboards, corrections, and client authentication.
+- [ ] **Phase 3 — explicit manager sharing.** Build exact preview, frozen selected-field publication, expiry/revocation, access history, and the web manager inbox.
+- [ ] **Phase 4 — protected team/HR releases.** Build privacy-gated workers and the web aggregate dashboards.
+- [ ] **Phase 5 — administration, actions, and notifications.** Build directory management, separate human decisions, in-app notices, and generic opted-in email.
+- [ ] **Phase 6 — owner export/deletion and recovery.** Build lifecycle workers and complete the release-gate audit before a live-data pilot.
 
 The product helps answer three questions: **How is my workload changing? What do I want my manager to know? Is the consenting team's or organization's workload becoming harder to sustain?**
 
@@ -318,7 +328,7 @@ Every mutable record has `entityType`, `schemaVersion`, `version`, `createdAt`, 
 
 ## 8. API contract
 
-**All routes below are planned**, under `/v1`. The current scaffold returns `503 NOT_CONFIGURED` and has no deployed routes.
+The catalogue below is the target first-release contract under `/v1`. The development stack currently exposes `GET /health` and JWT-protected `GET /v1/me`; all other catalogue routes remain unimplemented and are not attached to API Gateway.
 
 Protected APIs use a Cognito access token in the Authorization header. Work context requires current membership; archived personal reads/export/deletion require verified ownership. IDs in paths never establish authorization. Requests are schema-validated; all create/job requests use an idempotency key, and updates use expected versions to avoid overwriting concurrent changes.
 
@@ -410,11 +420,11 @@ Shared client packages must not import backend code or AWS credentials. Web/mobi
 
 ### Current implementation status
 
-| Present in the repository | Still to build |
-| --- | --- |
-| Web/mobile setup screens, shared package skeletons, basic consent schema/tests, build/type/lint scripts, CI, Amplify build specification, empty CDK stack | All specified pages and APIs, owner/role authorization, expanded consent/sharing schema, persistence, aggregation, notifications and AWS resources |
+Phase 0 and the Phase 1 development foundation are complete. The repository now contains the complete first-release runtime contracts, deterministic domain calculations, synthetic fixtures, DynamoDB key/repository primitives, server authorization gates, deployable Lambda entry points, outbox dispatch, and CDK infrastructure. Privacy tests inspect both behavior and the synthesized IAM policies. Manager/HR and admin Lambdas have no API routes yet, and the weekly aggregation schedule is deliberately disabled.
 
-The existing three-boolean consent schema is a scaffold and does **not** implement the separate team/HR scopes or field-level expiring grants in this specification.
+The deployed development environment is CloudFormation stack `WorkloadMonitorDevelopment` in `us-east-1`. Its public API base is `https://b7unboqbq8.execute-api.us-east-1.amazonaws.com`; `/health` returns `200`, while `/v1/me` returns `401` without a valid Cognito access token. Cognito client IDs and generated resource names are available from CloudFormation outputs. This environment is for implementation testing only and contains no seeded employee records.
+
+Phase 2 is next: connect Cognito to both clients and implement personal consent, tasks, check-ins, private items, trends, observations, and corrections. A user with no directory membership can authenticate but receives an empty membership list; organization invitations and membership assignment are not implemented yet.
 
 Use Node.js 24 LTS (Node 22.13+ also supported) and pnpm 10.30.0:
 
@@ -427,7 +437,7 @@ pnpm dev:web
 pnpm dev:mobile
 ```
 
-`pnpm check` runs lint, type-checks, starter tests and web/backend builds. `pnpm mobile:check` checks Expo dependencies. `pnpm infra:synth` synthesizes the empty stack locally without deploying. Native bundling/device testing are separate. On restricted Windows PowerShell, use `pnpm.cmd`.
+`pnpm check` runs lint, type-checks, privacy tests and web/backend builds. `pnpm mobile:check` checks Expo dependencies. `pnpm infra:synth` synthesizes the development stack locally without deploying. Native bundling/device testing are separate. On restricted Windows PowerShell, use `pnpm.cmd`.
 
 See [development commands](docs/development.md). Product authorization belongs in server handlers and service IAM; existing lint boundaries are not security enforcement.
 

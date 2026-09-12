@@ -1,2 +1,4 @@
-// This proposed floor is not an anonymity guarantee or a complete disclosure policy.
-export const PROPOSED_MINIMUM_CONTRIBUTORS = 5;
+export * from "./insights";
+export * from "./privacy";
+export * from "./retention";
+export * from "./trends";
