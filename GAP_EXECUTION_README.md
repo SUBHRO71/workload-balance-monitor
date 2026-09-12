@@ -65,6 +65,13 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Still open: connect page data mutations to the API client instead of local demo state, create memberships through the invitation/admin flow, and add browser E2E coverage for role-specific routes.
 - Restart here: add `VITE_COGNITO_DOMAIN` to local web env, open `/app`, complete hosted Cognito sign-in, and verify personal navigation before wiring live page data.
 
+### 2026-09-13 — hosted login CORS fix
+
+- Diagnosed the browser `OPTIONS /v1/me` 401 failure: API Gateway's `ANY` routes were authorizing preflight requests.
+- Replaced protected `ANY` routes with protected application methods plus unauthenticated `OPTIONS` routes. Deployed stack now returns CORS preflight 200 for `http://localhost:5173`.
+- Added callback failure handling and a 15-second timeout so Cognito errors return to the login page instead of leaving “Completing sign-in…” stuck.
+- Verify after a hard refresh. If an old callback is cached, clear `sessionStorage` and revisit `/app`.
+
 ### 2026-09-13 — synthetic role identities seeded
 
 - Created four development-only Cognito users with `.example.invalid` emails and assigned `member`, `manager`, `hr`, and `org_admin` groups.
