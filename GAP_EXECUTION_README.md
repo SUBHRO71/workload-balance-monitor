@@ -13,6 +13,13 @@ The earlier verified baseline was 14 suites / 61 tests. The proposed additions t
 
 ## Progress log
 
+### Local Vite and callback recovery
+
+- Found two project Vite servers on port 5173. Restarted with forced dependency optimization and pinned localhost:5173 with strictPort.
+- Replaced the callback effect's boolean guard with a shared exchange promise: React StrictMode can resubscribe without exchanging a one-time code twice or suppressing the active subscriber's state updates.
+- Browser refresh and a fresh hosted sign-in are still needed to verify the complete login journey.
+- Sign out now clears the application tokens and redirects through Cognito's `/logout` endpoint. New login requests include `prompt=login`, so another role can be selected instead of silently reusing the prior hosted session.
+
 ### 2026-09-13 — W0/W1 started
 
 - Completed in code: web and mobile consent defaults now start off; task/check-in API creation requires `Idempotency-Key`; API client creation methods carry the key; task/check-in source record, locator, idempotency result and personal-insight outbox event are assembled in one DynamoDB transaction; sequential replay returns the original record and payload reuse is rejected with 409.

@@ -43,11 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string>();
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [error, setError] = useState<string>();
-  const initializationStarted = useRef(false);
+  const codeExchange = useRef<ReturnType<typeof exchangeCode> | undefined>(undefined);
 
   useEffect(() => {
-    if (initializationStarted.current) return;
-    initializationStarted.current = true;
     let cancelled = false;
     const timeout = window.setTimeout(() => {
       if (!cancelled) {
@@ -62,7 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (oauthError) throw new Error(`Sign-in was declined: ${oauthError}`);
         const code = params.get("code");
         if (code) {
-          const tokens = await exchangeCode(code);
+          codeExchange.current ??= exchangeCode(code);
+          const tokens = await codeExchange.current;
+          if (cancelled) return;
           sessionStorage.setItem("workload.accessToken", tokens.access_token);
           if (tokens.id_token) sessionStorage.setItem("workload.idToken", tokens.id_token);
           window.history.replaceState({}, "", "/app");
@@ -99,15 +99,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login: () => {
       if (!cognitoDomain || !clientId) { setError("Cognito configuration is missing"); return; }
       const url = new URL(`${cognitoDomain.replace(/\/$/, "")}/oauth2/authorize`);
-      url.search = new URLSearchParams({ client_id: clientId, response_type: "code", scope: "openid email profile workload-monitor/read", redirect_uri: redirectUri }).toString();
+      url.search = new URLSearchParams({ client_id: clientId, response_type: "code", scope: "openid email profile workload-monitor/read", redirect_uri: redirectUri, prompt: "login" }).toString();
       window.location.assign(url.toString());
     },
     logout: () => {
-      sessionStorage.clear();
+      sessionStorage.removeItem("workload.accessToken");
+      sessionStorage.removeItem("workload.idToken");
       setAccessToken(undefined);
       setMemberships([]);
-      window.history.replaceState({}, "", "/");
-      window.location.reload();
+      if (cognitoDomain && clientId) {
+        const url = new URL(`${cognitoDomain.replace(/\/$/, "")}/logout`);
+        url.search = new URLSearchParams({ client_id: clientId, logout_uri: `${window.location.origin}/` }).toString();
+        window.location.assign(url.toString());
+        return;
+      }
+      window.location.assign("/");
     },
   }), [accessToken, error, loading, memberships]);
 
