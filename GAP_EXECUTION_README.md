@@ -47,6 +47,8 @@ The earlier verified baseline was 14 suites / 61 tests. The proposed additions t
 - Still open: job ID deduplication, expected disclosure-generation checks, notification delivery rechecks, and worker integration tests against SQS/DynamoDB.
 - Restart here: add generation/idempotency fields to job contracts and implement safe notification delivery before claiming W5 complete.
 
+Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm check` passed at the prior checkpoint (`a0e3f81`); the subsequent worker-only change has backend/workers typechecks passing but should be included in the next full check.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |
