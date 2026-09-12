@@ -13,19 +13,23 @@ export const TasksPage: React.FC = () => {
   const [effortUnit, setEffortUnit] = useState<"hours" | "points">("hours");
   const [status, setStatus] = useState<TaskInput["status"]>("planned");
   const [priority, setPriority] = useState<TaskInput["priority"]>("normal");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    addTask({
-      title: title.trim(),
-      workDate,
-      effort: { value: Number(effortValue), unit: effortUnit },
-      status,
-      priority,
-    });
-    setTitle("");
-    setIsFormOpen(false);
+    setIsSaving(true);
+    setError("");
+    try {
+      await addTask({ title: title.trim(), workDate, effort: { value: Number(effortValue), unit: effortUnit }, status, priority });
+      setTitle("");
+      setIsFormOpen(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save task");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -53,6 +57,8 @@ export const TasksPage: React.FC = () => {
           {isFormOpen ? "Cancel" : "+ Add Task"}
         </button>
       </div>
+
+      {error && <div role="alert" style={{ padding: "12px", marginBottom: "16px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}>{error}</div>}
 
       {isFormOpen ? (
         <form
@@ -156,6 +162,7 @@ export const TasksPage: React.FC = () => {
           <div style={{ gridColumn: "1 / -1", marginTop: "6px" }}>
             <button
               type="submit"
+              disabled={isSaving}
               style={{
                 padding: "10px 20px",
                 background: colors.accent,
@@ -166,7 +173,7 @@ export const TasksPage: React.FC = () => {
                 cursor: "pointer",
               }}
             >
-              Save Task
+              {isSaving ? "Saving…" : "Save Task"}
             </button>
           </div>
         </form>
@@ -218,7 +225,7 @@ export const TasksPage: React.FC = () => {
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right" }}>
                     <button
-                      onClick={() => deleteTask(task.id)}
+                      onClick={() => void deleteTask(task.id)}
                       style={{
                         background: "none",
                         border: "none",

@@ -85,6 +85,19 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Seeded matching active organization memberships, default-off consent records, organization policy, and one manager/team assignment in the development DynamoDB table.
 - Credentials are intentionally not stored in Git; provide them only through the secure handoff to the developer. Passwords should be rotated before any shared use.
 
+### 2026-09-13 — live task/check-in and explicit manager-sharing checkpoint
+
+- Web task and check-in pages now load and mutate authenticated AWS API records instead of React-only fixture state. Consent and preferences also load/save through the API, and write failures are visible in the forms.
+- The member sharing page now resolves the active direct-manager assignment from `GET /v1/me/managers`, requests a server projection preview, creates a frozen publication, lists grants, and revokes through the API. No manager identity or sample publication is hard-coded.
+- The manager “Shared Publications” tab now loads the real manager inbox. It starts empty and shows only publication-selected values; the page no longer inserts a sample direct-report publication. Team aggregates and manager action history also use their APIs.
+- Added direct-manager discovery coverage to `sharing-lifecycle.test.ts`. Full validation passed: 18 suites / 75 tests, plus lint, all workspace typechecks, and production builds.
+- Deployed the API update to the synthetic AWS development stack. Repaired four old synthetic consent rows to the current schema with every optional scope still off, and added the missing synthetic manager/team lookup pointer.
+- Live deployed verification passed with uniquely labelled synthetic data: the manager inbox was empty after member task/check-in creation; the member resolved only the assigned manager; after explicit publication the manager inbox returned selected task fields plus check-in date/manageability. The private check-in note marker was absent.
+- Consent invalidation stays behind the IAM boundary: the personal Lambda writes safe outbox jobs for team/org cache invalidation and treats direct cache cleanup as best-effort; the worker owns aggregate-view mutations. The personal role was not granted access to manager/HR view partitions.
+- Browser automation could not attach to the open Chrome surface in this session. Manual hosted-login UI verification remains required even though deployed Lambda/DynamoDB behavior was exercised.
+- Still local/not live in the web context: private-item create/delete, owner export download UX, account deletion UX, and dismissed personal insights. Do not describe those pages as fully integrated.
+- Restart here: hard-refresh `http://localhost:5173/app`, sign in as the synthetic member, verify the persisted validation task/check-in, then open Sharing and verify the existing live grant. Sign out through Cognito, sign in as the synthetic manager, and verify the same projection in Shared Publications. Next wire the explicitly listed local-only operations above.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |

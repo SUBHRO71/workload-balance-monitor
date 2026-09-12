@@ -131,6 +131,20 @@ describe("Phase 3: Explicit Manager Sharing Lifecycle", () => {
     expect((checkInProj?.values as Record<string, unknown> | undefined)?.privateNote).toBeUndefined();
   });
 
+  it("returns only the member's active assigned direct managers for the share composer", async () => {
+    const { store } = await setupStoreWithData();
+
+    await expect(store.listDirectManagersForUser(orgId, employeeId)).resolves.toEqual([
+      {
+        userId: managerId,
+        displayName: "Bob Manager",
+        teamId: "team-eng",
+        assignmentVersion: 1,
+      },
+    ]);
+    await expect(store.listDirectManagersForUser(orgId, otherManagerId)).resolves.toEqual([]);
+  });
+
   it("rejects share creation if the recipient is not the user's active direct manager", async () => {
     const { store, task } = await setupStoreWithData();
 

@@ -206,6 +206,28 @@ export class WorkloadStore implements AuthorizationStore {
     return assignments.filter((assignment) => assignment.status === "active");
   }
 
+  async listDirectManagersForUser(orgId: string, userId: string): Promise<Array<{
+    userId: string;
+    displayName: string;
+    teamId: string;
+    assignmentVersion: number;
+  }>> {
+    const assignments = await this.getActiveAssignmentsForUser(orgId, userId);
+    const managers = [];
+    for (const assignment of assignments) {
+      if (!assignment.directManagerId) continue;
+      const membership = await this.getMembership(orgId, assignment.directManagerId);
+      if (!membership || membership.status !== "active" || !membership.roles.includes("manager")) continue;
+      managers.push({
+        userId: membership.userId,
+        displayName: membership.displayName,
+        teamId: assignment.teamId,
+        assignmentVersion: assignment.assignmentVersion,
+      });
+    }
+    return managers;
+  }
+
   async isManagerOfTeam(orgId: string, teamId: string, managerId: string): Promise<boolean> {
     const result = await this.client.send(new GetCommand({ TableName: this.tableName, Key: keys.teamManager(orgId, teamId, managerId), ConsistentRead: true }));
     return result.Item?.status === "active";
@@ -233,10 +255,11 @@ export class WorkloadStore implements AuthorizationStore {
     if (!updated.teamAggregation || !updated.organizationAggregation) {
       const userAssignments = await this.getActiveAssignmentsForUser(orgId, userId);
       for (const assignment of userAssignments) {
-        await this.invalidateAggregateReleases(orgId, assignment.teamId);
+        await this.saveOutboxEvent(0, "publication.invalidate", `${orgId}#${assignment.teamId}`);
+        await this.invalidateAggregateReleases(orgId, assignment.teamId).catch(() => {});
       }
-      await this.invalidateAggregateReleases(orgId);
-      await this.saveOutboxEvent(0, "publication.invalidate", `${orgId}#${userId}`);
+      await this.saveOutboxEvent(0, "publication.invalidate", orgId);
+      await this.invalidateAggregateReleases(orgId).catch(() => {});
     }
     return updated;
   }
@@ -1518,9 +1541,18 @@ export class WorkloadStore implements AuthorizationStore {
       { Put: { TableName: this.tableName, Item: { ...keys.teamAssignment(orgId, teamId, userId), ...record } } },
       { Put: { TableName: this.tableName, Item: { PK: `DIRECTORY#ORG#${orgId}#USER#${userId}`, SK: `TEAM#${teamId}`, orgId, teamId, userId, status: "active" } } },
     ];
+    const previousManagerId = typeof existing?.directManagerId === "string" ? existing.directManagerId : undefined;
+    if (previousManagerId && previousManagerId !== assignment.directManagerId) {
+      transactItems.push({
+        Put: { TableName: this.tableName, Item: { ...keys.teamManager(orgId, teamId, previousManagerId), orgId, teamId, managerId: previousManagerId, status: "inactive" } },
+      });
+    }
     if (assignment.directManagerId) {
       transactItems.push({
         Put: { TableName: this.tableName, Item: { ...keys.teamManager(orgId, teamId, assignment.directManagerId), orgId, teamId, managerId: assignment.directManagerId, status: "active" } },
+      });
+      transactItems.push({
+        Put: { TableName: this.tableName, Item: { PK: keys.userTeams(orgId, assignment.directManagerId).PK, SK: `TEAM#${teamId}`, orgId, teamId, userId: assignment.directManagerId, status: "active" } },
       });
     }
     await this.client.send(new TransactWriteCommand({ TransactItems: transactItems }));

@@ -109,6 +109,10 @@ export class WorkloadApiClient {
     return this.request("PATCH", "/v1/me/profile", { displayName });
   }
 
+  async listMyManagers(): Promise<{ items: Array<{ userId: string; displayName: string; teamId: string; assignmentVersion: number }> }> {
+    return this.request("GET", "/v1/me/managers");
+  }
+
   // Preferences
   async getPreferences(): Promise<WorkloadPreferences> {
     return this.request("GET", "/v1/me/preferences");

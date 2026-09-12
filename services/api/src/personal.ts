@@ -73,6 +73,11 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
       return json(200, updated);
     }
 
+    if (path === "/v1/me/managers" && method === "GET") {
+      const items = await store.listDirectManagersForUser(orgId, caller.userId);
+      return json(200, { items });
+    }
+
     // Preferences
     if (path === "/v1/me/preferences") {
       if (method === "GET") {

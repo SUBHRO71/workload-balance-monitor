@@ -8,15 +8,21 @@ export const CheckInsPage: React.FC = () => {
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [rating, setRating] = useState<number>(3);
   const [note, setNote] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addCheckIn({
-      checkInDate: date,
-      manageability: rating,
-      privateNote: note.trim() || undefined,
-    });
-    setNote("");
+    setIsSaving(true);
+    setError("");
+    try {
+      await addCheckIn({ checkInDate: date, manageability: rating, privateNote: note.trim() || undefined });
+      setNote("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save check-in");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -29,6 +35,8 @@ export const CheckInsPage: React.FC = () => {
           Check in on how manageable your workload feels. Private notes stay owner-only and have no upward sharing path.
         </p>
       </div>
+
+      {error && <div role="alert" style={{ padding: "12px", marginBottom: "16px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}>{error}</div>}
 
       <div
         style={{
@@ -108,7 +116,7 @@ export const CheckInsPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={!consent.personalProcessing}
+            disabled={!consent.personalProcessing || isSaving}
             style={{
               padding: "10px 18px",
               background: colors.accent,
@@ -119,7 +127,7 @@ export const CheckInsPage: React.FC = () => {
               cursor: consent.personalProcessing ? "pointer" : "not-allowed",
             }}
           >
-            Save Check-in
+            {isSaving ? "Saving…" : "Save Check-in"}
           </button>
         </form>
       </div>
@@ -161,7 +169,7 @@ export const CheckInsPage: React.FC = () => {
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right" }}>
                     <button
-                      onClick={() => deleteCheckIn(item.id)}
+                      onClick={() => void deleteCheckIn(item.id)}
                       style={{ background: "none", border: "none", color: "#c5221f", cursor: "pointer", fontSize: "0.85rem" }}
                     >
                       Delete

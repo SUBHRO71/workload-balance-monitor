@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { WorkloadApiClient } from "@workload/api-client";
 import { colors } from "@workload/design-tokens";
-import type { HumanActionRecord } from "@workload/contracts";
+import type { HumanActionRecord, Publication, SharingGrant } from "@workload/contracts";
+import { useAuth } from "../auth";
 
 interface MockPublication {
   grantId: string;
@@ -8,6 +10,24 @@ interface MockPublication {
   range: { from: string; to: string };
   expiresAt: string;
   items: Array<{ title: string; date: string; effort: string; status: string }>;
+}
+
+function publicationCard(grant: SharingGrant, publication: Publication): MockPublication {
+  return {
+    grantId: grant.id,
+    ownerDisplayName: `Direct report ${grant.ownerId}`,
+    range: grant.range,
+    expiresAt: grant.expiresAt.slice(0, 10),
+    items: publication.selectedValues.map(({ selection, values }) => {
+      const effort = values.effort as { value?: unknown; unit?: unknown } | undefined;
+      return {
+        title: typeof values.title === "string" ? values.title : selection.recordType === "check_in" ? "Voluntary check-in" : "Shared workload item",
+        date: typeof values.workDate === "string" ? values.workDate : typeof values.checkInDate === "string" ? values.checkInDate : "",
+        effort: effort && effort.value !== undefined ? `${String(effort.value)} ${String(effort.unit ?? "")}` : values.manageability !== undefined ? `Manageability ${String(values.manageability)}/5` : "",
+        status: typeof values.status === "string" ? values.status : "shared",
+      };
+    }),
+  };
 }
 
 interface MockTeamAggregate {
@@ -26,65 +46,81 @@ interface MockTeamAggregate {
 }
 
 export const ManagerPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"aggregates" | "shares" | "actions">("aggregates");
+  const auth = useAuth();
+  const orgId = auth.memberships.find((membership) => membership.status === "active")?.orgId;
+  const api = useMemo(() => new WorkloadApiClient({
+    baseUrl: import.meta.env.VITE_API_URL as string,
+    getAccessToken: async () => auth.accessToken,
+    ...(orgId ? { orgId } : {}),
+  }), [auth.accessToken, orgId]);
+  const [activeTab, setActiveTab] = useState<"aggregates" | "shares" | "actions">("shares");
+  const [shareError, setShareError] = useState("");
 
-  const [actions, setActions] = useState<HumanActionRecord[]>([
-    {
-      id: "act-demo-1",
-      orgId: "demo-org",
-      scope: "team",
-      teamId: "team-eng",
-      authorId: "user-mgr-01",
-      authorName: "Engineering Lead",
-      rationale: "Discussed sprint workload distribution; adjusting commitments to keep weekly effort manageable.",
-      status: "in_progress",
-      followUpAt: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ]);
+  const [actions, setActions] = useState<HumanActionRecord[]>([]);
   const [newActionRationale, setNewActionRationale] = useState("");
   const [newActionFollowUp, setNewActionFollowUp] = useState("");
 
-  const [publications] = useState<MockPublication[]>([
-    {
-      grantId: "grant-sample-01",
-      ownerDisplayName: "Alice Employee (Direct Report)",
-      range: { from: "2026-03-01", to: "2026-03-15" },
-      expiresAt: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-      items: [
-        { title: "Core authentication refactor", date: "2026-03-05", effort: "14 hours", status: "done" },
-        { title: "Client boundary audit", date: "2026-03-10", effort: "18 hours", status: "in_progress" },
-      ],
-    },
-  ]);
+  const [publications, setPublications] = useState<MockPublication[]>([]);
 
-  const [teamAggregates] = useState<MockTeamAggregate[]>([
-    {
-      teamId: "team-eng",
-      teamName: "Core Engineering",
-      state: "available",
-      range: { startDate: "2026-03-01", endDate: "2026-03-07" },
-      generatedAt: "2026-03-08T00:00:00.000Z",
-      evidenceStrength: "developing",
-      metrics: [
-        { key: "meanWeeklyEffort", value: 36.5, contributorCountBand: "5-9" },
-        { key: "meanManageability", value: 4.1, contributorCountBand: "5-9" },
-      ],
-    },
-    {
-      teamId: "team-design",
-      teamName: "Product Design",
-      state: "insufficient_contributors",
-      range: { startDate: "2026-03-01", endDate: "2026-03-07" },
-      generatedAt: "2026-03-08T00:00:00.000Z",
-      evidenceStrength: "limited",
-      reason: "At least 5 distinct consenting contributors are required (current: 3)",
-    },
-  ]);
+  useEffect(() => {
+    if (!auth.accessToken || !orgId) return;
+    void api.listManagerShares()
+      .then((page) => setPublications(page.items.map(({ grant, publication }) => publicationCard(grant, publication))))
+      .catch((cause: unknown) => setShareError(cause instanceof Error ? cause.message : "Unable to load shared publications"));
+  }, [api, auth.accessToken, orgId]);
 
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("team-eng");
-  const selectedTeam = teamAggregates.find((t) => t.teamId === selectedTeamId) ?? teamAggregates[0]!;
+  const [teamAggregates, setTeamAggregates] = useState<MockTeamAggregate[]>([]);
+
+  useEffect(() => {
+    if (!auth.accessToken || !orgId) return;
+    void api.getManagerTeams().then(async ({ items }) => {
+      const aggregates = await Promise.all(items.map(async ({ teamId }): Promise<MockTeamAggregate> => {
+        const result = await api.getTeamTrends(teamId);
+        const aggregate: MockTeamAggregate = {
+          teamId,
+          teamName: teamId,
+          state: result.state === "stale" ? "invalid" as const : result.state,
+          range: { startDate: result.range.from, endDate: result.range.to },
+          generatedAt: result.generatedAt ?? "Not generated",
+          evidenceStrength: result.evidenceStrength,
+        };
+        if (result.metrics) aggregate.metrics = result.metrics.filter((metric) => metric.key !== "capacityRatio") as NonNullable<MockTeamAggregate["metrics"]>;
+        if (result.reason) aggregate.reason = result.reason;
+        return aggregate;
+      }));
+      setTeamAggregates(aggregates);
+      setSelectedTeamId((current) => current || aggregates[0]?.teamId || "");
+    }).catch(() => setTeamAggregates([]));
+  }, [api, auth.accessToken, orgId]);
+
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const selectedTeam = teamAggregates.find((t) => t.teamId === selectedTeamId) ?? teamAggregates[0] ?? {
+    teamId: "",
+    teamName: "No assigned teams",
+    state: "insufficient_contributors" as const,
+    range: { startDate: "—", endDate: "—" },
+    generatedAt: "Not generated",
+    evidenceStrength: "limited" as const,
+    reason: "No active manager team assignment is available.",
+  };
+
+  useEffect(() => {
+    if (!selectedTeamId) { setActions([]); return; }
+    void api.listManagerTeamActions(selectedTeamId).then(({ items }) => setActions(items)).catch(() => setActions([]));
+  }, [api, selectedTeamId]);
+
+  const recordAction = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newActionRationale || !selectedTeamId) return;
+    const created = await api.createManagerTeamAction(selectedTeamId, {
+      rationale: newActionRationale,
+      status: "open",
+      ...(newActionFollowUp ? { followUpAt: new Date(`${newActionFollowUp}T00:00:00.000Z`).toISOString() } : {}),
+    });
+    setActions((current) => [created, ...current]);
+    setNewActionRationale("");
+    setNewActionFollowUp("");
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -288,6 +324,9 @@ export const ManagerPage: React.FC = () => {
             Active Direct Report Publications ({publications.length})
           </h2>
 
+          {shareError && <div role="alert" style={{ padding: "12px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}>{shareError}</div>}
+          {!shareError && publications.length === 0 && <p style={{ color: colors.muted }}>No member has explicitly published a workload snapshot to you.</p>}
+
           {publications.map((pub) => (
             <div
               key={pub.grantId}
@@ -386,26 +425,7 @@ export const ManagerPage: React.FC = () => {
             </p>
 
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!newActionRationale) return;
-                const newAct: HumanActionRecord = {
-                  id: `act-${Date.now()}`,
-                  orgId: "demo-org",
-                  scope: "team",
-                  teamId: selectedTeamId,
-                  authorId: "user-mgr-01",
-                  authorName: "Engineering Lead",
-                  rationale: newActionRationale,
-                  status: "open",
-                  followUpAt: newActionFollowUp || undefined,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                };
-                setActions((prev) => [newAct, ...prev]);
-                setNewActionRationale("");
-                setNewActionFollowUp("");
-              }}
+              onSubmit={(event) => void recordAction(event)}
               style={{ display: "flex", flexDirection: "column", gap: "12px" }}
             >
               <div>
@@ -437,6 +457,7 @@ export const ManagerPage: React.FC = () => {
 
                 <button
                   type="submit"
+                  disabled={!selectedTeamId}
                   style={{
                     padding: "9px 20px",
                     borderRadius: "6px",

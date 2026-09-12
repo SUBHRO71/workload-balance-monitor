@@ -54,4 +54,10 @@ describe("AWS privacy boundaries", () => {
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.Properties?.State).toBe("DISABLED");
   });
+
+  it("allows the authenticated organization context header in browser CORS preflights", () => {
+    const templateText = JSON.stringify(synthesized);
+    expect(templateText).toContain("x-org-id");
+    expect(templateText).toContain("http://localhost:5173");
+  });
 });

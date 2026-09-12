@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { WorkloadApiClient } from "@workload/api-client";
 import type {
   CheckInInput,
   CheckInRecord,
@@ -17,22 +18,22 @@ import {
   type PersonalInsight,
   type WeeklyWorkloadPoint,
 } from "@workload/domain";
-import { createSyntheticCohort } from "@workload/test-fixtures";
+import { useAuth } from "../auth";
 
 interface WorkloadContextType {
   isDemoMode: boolean;
   setDemoMode: (enabled: boolean) => void;
   consent: ConsentScopes;
-  updateConsent: (scopes: ConsentScopes) => void;
+  updateConsent: (scopes: ConsentScopes) => Promise<void>;
   preferences: WorkloadPreferences;
-  updatePreferences: (prefs: Partial<WorkloadPreferences>) => void;
+  updatePreferences: (prefs: Partial<WorkloadPreferences>) => Promise<void>;
   tasks: TaskRecord[];
-  addTask: (input: TaskInput) => void;
-  updateTask: (id: string, update: Partial<TaskInput>) => void;
-  deleteTask: (id: string) => void;
+  addTask: (input: TaskInput) => Promise<void>;
+  updateTask: (id: string, update: Partial<TaskInput>) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
   checkIns: CheckInRecord[];
-  addCheckIn: (input: CheckInInput) => void;
-  deleteCheckIn: (id: string) => void;
+  addCheckIn: (input: CheckInInput) => Promise<void>;
+  deleteCheckIn: (id: string) => Promise<void>;
   privateItems: PrivateItemRecord[];
   addPrivateItem: (input: PrivateItemInput) => void;
   deletePrivateItem: (id: string) => void;
@@ -54,7 +55,14 @@ const defaultConsent: ConsentScopes = {
 const WorkloadContext = createContext<WorkloadContextType | null>(null);
 
 export function WorkloadProvider({ children }: { children: React.ReactNode }) {
-  const [isDemoMode, setDemoMode] = useState<boolean>(true);
+  const auth = useAuth();
+  const orgId = auth.memberships.find((membership) => membership.status === "active")?.orgId;
+  const api = useMemo(() => new WorkloadApiClient({
+    baseUrl: import.meta.env.VITE_API_URL as string,
+    getAccessToken: async () => auth.accessToken,
+    ...(orgId ? { orgId } : {}),
+  }), [auth.accessToken, orgId]);
+  const [isDemoMode, setDemoMode] = useState<boolean>(false);
   const [consent, setConsent] = useState<ConsentScopes>(defaultConsent);
   const [preferences, setPreferences] = useState<WorkloadPreferences>({
     timezone: "UTC",
@@ -62,46 +70,23 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
     workdays: [1, 2, 3, 4, 5],
   });
 
-  const [tasks, setTasks] = useState<TaskRecord[]>(() => {
-    const cohort = createSyntheticCohort(1, 101);
-    return cohort.tasks.slice(0, 8);
-  });
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
 
-  const [checkIns, setCheckIns] = useState<CheckInRecord[]>(() => {
-    const cohort = createSyntheticCohort(1, 101);
-    return cohort.checkIns.slice(0, 6);
-  });
+  const [privateItems, setPrivateItems] = useState<PrivateItemRecord[]>([]);
 
-  const [privateItems, setPrivateItems] = useState<PrivateItemRecord[]>([
-    {
-      entityType: "PRIVATE_ITEM",
-      id: "item-init-1",
-      orgId: "demo-org",
-      ownerId: "demo-user",
-      type: "personal_goal",
-      title: "Complete AWS CDK Certification",
-      lifecycle: "ongoing",
-      schemaVersion: 1,
-      version: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      entityType: "PRIVATE_ITEM",
-      id: "item-init-2",
-      orgId: "demo-org",
-      ownerId: "demo-user",
-      type: "leave_detail",
-      title: "Annual Leave Trip",
-      lifecycle: "one_time",
-      eventEndAt: "2026-08-15T00:00:00.000Z",
-      deleteAfter: "2027-08-15T00:00:00.000Z",
-      schemaVersion: 1,
-      version: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ]);
+  useEffect(() => {
+    if (!auth.accessToken || !orgId) return;
+    void Promise.all([api.getConsent(), api.getPreferences(), api.listTasks({ limit: 100 }), api.listCheckIns({ limit: 100 }), api.listPrivateItems({ limit: 100 })])
+      .then(([nextConsent, nextPreferences, taskPage, checkInPage, privatePage]) => {
+        setConsent(nextConsent);
+        setPreferences(nextPreferences);
+        setTasks(taskPage.items);
+        setCheckIns(checkInPage.items);
+        setPrivateItems(privatePage.items);
+      })
+      .catch((error: unknown) => console.error("workspace_load_failed", error instanceof Error ? error.message : "Unknown"));
+  }, [api, auth.accessToken, orgId]);
 
   const [dismissedInsightTitles, setDismissedInsightTitles] = useState<Set<string>>(new Set());
 
@@ -127,61 +112,37 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
   const strength: EvidenceStrength =
     trends.length >= 6 ? "consistent" : trends.length >= 3 ? "developing" : "limited";
 
-  const addTask = (input: TaskInput) => {
+  const addTask = async (input: TaskInput) => {
     if (!consent.personalProcessing) {
       alert("Personal processing is disabled in your Privacy settings.");
       return;
     }
-    const now = new Date().toISOString();
-    const newTask: TaskRecord = {
-      ...input,
-      entityType: "TASK",
-      id: `task-${Date.now()}`,
-      orgId: "demo-org",
-      ownerId: "demo-user",
-      source: "user",
-      schemaVersion: 1,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const newTask = await api.createTask(input, crypto.randomUUID());
     setTasks((prev) => [newTask, ...prev]);
   };
 
-  const updateTask = (id: string, update: Partial<TaskInput>) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, ...update, version: t.version + 1, updatedAt: new Date().toISOString() } : t,
-      ),
-    );
+  const updateTask = async (id: string, update: Partial<TaskInput>) => {
+    const existing = tasks.find((task) => task.id === id);
+    const updated = await api.updateTask(id, { ...update, ...(existing ? { expectedVersion: existing.version } : {}) });
+    setTasks((prev) => prev.map((task) => task.id === id ? updated : task));
   };
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
+    await api.deleteTask(id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const addCheckIn = (input: CheckInInput) => {
+  const addCheckIn = async (input: CheckInInput) => {
     if (!consent.personalProcessing) {
       alert("Personal processing is disabled in your Privacy settings.");
       return;
     }
-    const now = new Date().toISOString();
-    const newCheckIn: CheckInRecord = {
-      ...input,
-      entityType: "CHECKIN",
-      id: `checkin-${Date.now()}`,
-      orgId: "demo-org",
-      ownerId: "demo-user",
-      source: "user",
-      schemaVersion: 1,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const newCheckIn = await api.createCheckIn(input, crypto.randomUUID());
     setCheckIns((prev) => [newCheckIn, ...prev]);
   };
 
-  const deleteCheckIn = (id: string) => {
+  const deleteCheckIn = async (id: string) => {
+    await api.deleteCheckIn(id);
     setCheckIns((prev) => prev.filter((c) => c.id !== id));
   };
 
@@ -223,12 +184,14 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
     setPrivateItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const updateConsent = (scopes: ConsentScopes) => {
-    setConsent(scopes);
+  const updateConsent = async (scopes: ConsentScopes) => {
+    const updated = await api.updateConsent(scopes);
+    setConsent(updated);
   };
 
-  const updatePreferences = (prefs: Partial<WorkloadPreferences>) => {
-    setPreferences((prev) => ({ ...prev, ...prefs }));
+  const updatePreferences = async (prefs: Partial<WorkloadPreferences>) => {
+    const updated = await api.updatePreferences(prefs);
+    setPreferences(updated);
   };
 
   const dismissInsight = (title: string) => {

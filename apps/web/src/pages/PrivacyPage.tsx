@@ -10,23 +10,20 @@ export const PrivacyPage: React.FC = () => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState("");
+  const [consentError, setConsentError] = useState("");
 
-  const handleToggle = (key: keyof typeof consent) => {
+  const handleToggle = async (key: keyof typeof consent) => {
     if (key === "notifications") return;
-    updateConsent({
-      ...consent,
-      [key]: !consent[key],
-    });
+    setConsentError("");
+    try { await updateConsent({ ...consent, [key]: !consent[key] }); }
+    catch (cause) { setConsentError(cause instanceof Error ? cause.message : "Unable to update consent"); }
   };
 
-  const handleNotificationToggle = (channel: "inApp" | "managerEmail") => {
-    updateConsent({
-      ...consent,
-      notifications: {
-        ...consent.notifications,
-        [channel]: !consent.notifications[channel],
-      },
-    });
+  const handleNotificationToggle = async (channel: "inApp" | "managerEmail") => {
+    setConsentError("");
+    try {
+      await updateConsent({ ...consent, notifications: { ...consent.notifications, [channel]: !consent.notifications[channel] } });
+    } catch (cause) { setConsentError(cause instanceof Error ? cause.message : "Unable to update consent"); }
   };
 
   const handleExport = async () => {
@@ -78,6 +75,7 @@ export const PrivacyPage: React.FC = () => {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {consentError && <div role="alert" style={{ padding: "12px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}>{consentError}</div>}
         {/* Scope 1: Personal Processing */}
         <div style={{ background: colors.surface, padding: "20px", border: "1px solid #dbe6df", borderRadius: "12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "20px" }}>
@@ -93,7 +91,7 @@ export const PrivacyPage: React.FC = () => {
             <input
               type="checkbox"
               checked={consent.personalProcessing}
-              onChange={() => handleToggle("personalProcessing")}
+              onChange={() => void handleToggle("personalProcessing")}
               style={{ transform: "scale(1.4)", cursor: "pointer", marginTop: "4px" }}
             />
           </div>
@@ -115,7 +113,7 @@ export const PrivacyPage: React.FC = () => {
             <input
               type="checkbox"
               checked={consent.teamAggregation}
-              onChange={() => handleToggle("teamAggregation")}
+              onChange={() => void handleToggle("teamAggregation")}
               style={{ transform: "scale(1.4)", cursor: "pointer", marginTop: "4px" }}
             />
           </div>
@@ -136,7 +134,7 @@ export const PrivacyPage: React.FC = () => {
             <input
               type="checkbox"
               checked={consent.organizationAggregation}
-              onChange={() => handleToggle("organizationAggregation")}
+              onChange={() => void handleToggle("organizationAggregation")}
               style={{ transform: "scale(1.4)", cursor: "pointer", marginTop: "4px" }}
             />
           </div>
@@ -156,7 +154,7 @@ export const PrivacyPage: React.FC = () => {
               <input
                 type="checkbox"
                 checked={consent.notifications.inApp}
-                onChange={() => handleNotificationToggle("inApp")}
+                onChange={() => void handleNotificationToggle("inApp")}
               />
               In-app notification inbox
             </label>
@@ -165,7 +163,7 @@ export const PrivacyPage: React.FC = () => {
               <input
                 type="checkbox"
                 checked={consent.notifications.managerEmail}
-                onChange={() => handleNotificationToggle("managerEmail")}
+                onChange={() => void handleNotificationToggle("managerEmail")}
               />
               Generic manager review email notification (SNS)
             </label>
