@@ -9,6 +9,18 @@ import {
 import { Navigation, type NavTab } from "./components/Navigation";
 import { WorkloadProvider } from "./context/WorkloadContext";
 import { DashboardPage } from "./pages/DashboardPage";
+import { TasksPage } from "./pages/TasksPage";
+import { CheckInsPage } from "./pages/CheckInsPage";
+import { PrivateItemsPage } from "./pages/PrivateItemsPage";
+import { TrendsPage } from "./pages/TrendsPage";
+import { SharingPage } from "./pages/SharingPage";
+import { ManagerPage } from "./pages/ManagerPage";
+import { HrPage } from "./pages/HrPage";
+import { AdminPage } from "./pages/AdminPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { AuthProvider, useAuth } from "./auth";
 
 function Nav() {
   return (
@@ -140,7 +152,7 @@ function Footer() {
 }
 
 export function App() {
-  return window.location.pathname === "/app" ? <DashboardRoute /> : <LandingPage />;
+  return <AuthProvider>{window.location.pathname.startsWith("/app") || window.location.pathname === "/auth/callback" ? <DashboardRoute /> : <LandingPage />}</AuthProvider>;
 }
 
 function LandingPage() {
@@ -175,19 +187,68 @@ function LandingPage() {
 }
 
 function DashboardRoute() {
-  const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
+  const auth = useAuth();
+  const initialTab = (window.location.pathname.split("/")[2] || "dashboard") as NavTab;
+  const [activeTab, setActiveTab] = useState<NavTab>(initialTab);
+
+  if (auth.loading) return <AuthLoading />;
+  if (window.location.pathname === "/auth/callback") return <AuthLoading message="Completing sign-in…" />;
+  if (!auth.authenticated) return <LoginPage />;
+
+  const activeMembership = auth.memberships.find((membership) => membership.status === "active");
+  const roles = activeMembership?.roles ?? [];
+  const allowedTabs: NavTab[] = ["dashboard", "tasks", "checkins", "private", "trends", "sharing", "notifications", "privacy", "settings"];
+  if (roles.includes("manager")) allowedTabs.push("manager");
+  if (roles.includes("hr")) allowedTabs.push("hr");
+  if (roles.includes("org_admin")) allowedTabs.push("admin");
+  const selectedTab = allowedTabs.includes(activeTab) ? activeTab : "dashboard";
+  const selectTab = (tab: NavTab) => {
+    if (!allowedTabs.includes(tab)) return;
+    setActiveTab(tab);
+    window.history.pushState({}, "", tab === "dashboard" ? "/app" : `/app/${tab}`);
+  };
 
   return (
     <WorkloadProvider>
       <Navigation
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        isDemoMode
+        activeTab={selectedTab}
+        onSelectTab={selectTab}
+        allowedTabs={allowedTabs}
+        isDemoMode={false}
         onToggleDemo={() => undefined}
       />
       <main style={{ maxWidth: "1000px", margin: "0 auto", padding: "30px 20px" }}>
-        <DashboardPage />
+        {selectedTab === "dashboard" && <DashboardPage />}
+        {selectedTab === "tasks" && <TasksPage />}
+        {selectedTab === "checkins" && <CheckInsPage />}
+        {selectedTab === "private" && <PrivateItemsPage />}
+        {selectedTab === "trends" && <TrendsPage />}
+        {selectedTab === "sharing" && <SharingPage />}
+        {selectedTab === "manager" && <ManagerPage />}
+        {selectedTab === "hr" && <HrPage />}
+        {selectedTab === "admin" && <AdminPage />}
+        {selectedTab === "notifications" && <NotificationsPage />}
+        {selectedTab === "privacy" && <PrivacyPage />}
+        {selectedTab === "settings" && <SettingsPage />}
       </main>
     </WorkloadProvider>
   );
+}
+
+function AuthLoading({ message = "Loading your workspace…" }: { message?: string }) {
+  return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "system-ui" }}><p>{message}</p></main>;
+}
+
+function LoginPage() {
+  const auth = useAuth();
+  return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#f4f8f5", padding: 24 }}>
+    <section style={{ maxWidth: 440, width: "100%", background: "white", borderRadius: 18, padding: 36, boxShadow: "0 12px 40px rgba(25,55,40,.12)" }}>
+      <div style={{ color: "#276749", fontWeight: 800, letterSpacing: ".12em", fontSize: 13 }}>PULSE / WORKLOAD BALANCE</div>
+      <h1 style={{ marginBottom: 10 }}>Sign in to your workspace</h1>
+      <p style={{ color: "#52635a", lineHeight: 1.5 }}>Use your organization account. Your available workspace pages are determined by your current membership roles.</p>
+      {auth.error && <p role="alert" style={{ color: "#a33", background: "#fff1f1", padding: 12, borderRadius: 8 }}>{auth.error}</p>}
+      <button onClick={auth.login} style={{ width: "100%", padding: "13px 16px", border: 0, borderRadius: 9, background: "#276749", color: "white", fontWeight: 700, cursor: "pointer" }}>Continue with secure sign-in</button>
+      <a href="/" style={{ display: "block", marginTop: 18, textAlign: "center", color: "#52635a" }}>Back to landing page</a>
+    </section>
+  </main>;
 }

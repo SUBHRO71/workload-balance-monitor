@@ -53,8 +53,8 @@ export class WorkloadMonitorStack extends Stack {
       callbackUrls: ["http://localhost:5173/auth/callback", "workloadbalance://auth/callback"],
       logoutUrls: ["http://localhost:5173/", "workloadbalance://sign-out"],
     };
-    const webClient = userPool.addClient("WebClient", { generateSecret: false, authFlows: { userSrp: true }, oAuth: oauth, preventUserExistenceErrors: true });
-    const mobileClient = userPool.addClient("MobileClient", { generateSecret: false, authFlows: { userSrp: true }, oAuth: oauth, preventUserExistenceErrors: true });
+    const webClient = userPool.addClient("WebClient", { generateSecret: false, authFlows: { userSrp: true, userPassword: true }, oAuth: oauth, preventUserExistenceErrors: true });
+    const mobileClient = userPool.addClient("MobileClient", { generateSecret: false, authFlows: { userSrp: true, userPassword: true }, oAuth: oauth, preventUserExistenceErrors: true });
     const userPoolDomain = userPool.addDomain("HostedDomain", { cognitoDomain: { domainPrefix: `workload-monitor-${this.account}` } });
 
     const defaults: Partial<lambdaNodejs.NodejsFunctionProps> = {

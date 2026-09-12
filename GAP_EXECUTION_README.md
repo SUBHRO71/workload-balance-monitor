@@ -56,6 +56,15 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Deployment is synthetic-development only. PITR remains disabled, weekly schedule remains disabled, and the deployed API still requires Cognito users before authenticated route testing.
 - Restart here: configure `apps/web/.env.local` and `apps/mobile/.env`, then create synthetic Cognito users and verify `/health` and authenticated `/v1/me`.
 
+### 2026-09-13 — web authentication/routing checkpoint
+
+- Added a Cognito hosted-UI login/callback flow to the web app. Tokens are held in session storage only, sign-out clears the session, and missing/invalid API authorization returns the login state.
+- `/app` now routes to the selected page instead of always rendering the dashboard. Personal tabs are always available after authentication; manager, HR, and admin tabs are rendered only when the current `/v1/me` membership has the corresponding active role. Direct unauthorized tab paths fall back to the dashboard.
+- Added a visible sign-in page and sign-out control. `VITE_COGNITO_DOMAIN` is now part of the web environment contract.
+- Web typecheck passes and production build passes. Password-auth smoke testing returned `/health` 200 and `/v1/me` 403 because API Gateway requires the custom `workload-monitor/read` scope; the hosted OAuth login flow requests that scope and is the supported browser path.
+- Still open: connect page data mutations to the API client instead of local demo state, create memberships through the invitation/admin flow, and add browser E2E coverage for role-specific routes.
+- Restart here: add `VITE_COGNITO_DOMAIN` to local web env, open `/app`, complete hosted Cognito sign-in, and verify personal navigation before wiring live page data.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |

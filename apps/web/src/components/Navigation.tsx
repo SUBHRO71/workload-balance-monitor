@@ -1,5 +1,6 @@
 import React from "react";
 import { colors } from "@workload/design-tokens";
+import { useAuth } from "../auth";
 
 export type NavTab = "dashboard" | "tasks" | "checkins" | "private" | "trends" | "sharing" | "manager" | "hr" | "admin" | "notifications" | "privacy" | "settings";
 
@@ -8,6 +9,7 @@ interface NavigationProps {
   onSelectTab: (tab: NavTab) => void;
   isDemoMode: boolean;
   onToggleDemo: () => void;
+  allowedTabs?: NavTab[];
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -15,7 +17,9 @@ export const Navigation: React.FC<NavigationProps> = ({
   onSelectTab,
   isDemoMode,
   onToggleDemo,
+  allowedTabs,
 }) => {
+  const auth = useAuth();
   const tabs: Array<{ id: NavTab; label: string; icon: string }> = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "tasks", label: "Tasks", icon: "📝" },
@@ -55,7 +59,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-        {tabs.map((tab) => {
+        {tabs.filter((tab) => !allowedTabs || allowedTabs.includes(tab.id)).map((tab) => {
           const isActive = activeTab === tab.id;
           return (
             <button
@@ -103,6 +107,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           />
           <strong>Synthetic Demo Mode</strong>
         </label>
+        <button onClick={auth.logout} style={{ border: "1px solid #c8d8cf", background: "white", borderRadius: 6, padding: "6px 10px", cursor: "pointer" }}>Sign out</button>
       </div>
     </header>
   );
