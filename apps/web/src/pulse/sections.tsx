@@ -1,105 +1,10 @@
-import { type CSSProperties, type ReactNode } from "react";
-import { cx, CountUp, Reveal } from "./primitives";
+import { type CSSProperties } from "react";
+import { Reveal } from "./primitives";
 import {
-  CapacityBar,
-  ConsentSwitch,
-  EffortBars,
-  LockGlyph,
-  ManageScale,
-  PrivateTally,
-  ShareFlow,
-  ShareGlyph,
-  Waveform,
   WireSweep,
   XGlyph,
 } from "./visuals";
 
-/* ------------------------------------------------------------------ */
-/* Role model — the privacy ladder with a hard consent boundary        */
-/* ------------------------------------------------------------------ */
-
-function RoleRow({
-  index,
-  name,
-  desc,
-  note,
-  tone,
-  children,
-}: {
-  index: string;
-  name: string;
-  desc: string;
-  note?: string;
-  tone: "admin" | "aggregate" | "manager" | "consent" | "personal";
-  children: ReactNode;
-}) {
-  return (
-    <div className={cx("role", `role--${tone}`)}>
-      <div className="role__meta">
-        <span className="role__index">{index}</span>
-        <h3 className="role__name">{name}</h3>
-        <p className="role__desc">{desc}</p>
-        {note ? <p className="role__note">{note}</p> : null}
-      </div>
-      <div className="role__viz">{children}</div>
-    </div>
-  );
-}
-
-function AdminGlyph() {
-  return (
-    <div className="admin-glyph" aria-hidden="true">
-      <svg viewBox="0 0 120 44" className="admin-glyph__graph">
-        <circle className="admin-glyph__node" cx="18" cy="22" r="3.5" />
-        <circle className="admin-glyph__node" cx="60" cy="10" r="3.5" />
-        <circle className="admin-glyph__node" cx="60" cy="34" r="3.5" />
-        <circle className="admin-glyph__node" cx="102" cy="22" r="3.5" />
-        <line className="admin-glyph__link" x1="18" y1="22" x2="60" y2="10" />
-        <line className="admin-glyph__link" x1="18" y1="22" x2="60" y2="34" />
-        <line className="admin-glyph__link" x1="60" y1="10" x2="102" y2="22" />
-        <line className="admin-glyph__link" x1="60" y1="34" x2="102" y2="22" />
-      </svg>
-      <span className="admin-glyph__deny">
-        <span className="dot dot--private dot--still" />
-        <XGlyph className="admin-glyph__x" />
-        <span className="admin-glyph__deny-label">PERSONAL DATA</span>
-      </span>
-    </div>
-  );
-}
-
-function AggBars({
-  rows,
-  label,
-}: {
-  rows: ReadonlyArray<number>;
-  label: string;
-}) {
-  return (
-    <div className="agg" aria-hidden="true">
-      <div className="agg__chart">
-        {rows.map((w, i) => (
-          <span
-            key={i}
-            className="agg__bar"
-            style={{ width: `${w * 100}%`, transitionDelay: `${i * 120}ms` }}
-          />
-        ))}
-      </div>
-      <span className="agg__label">{label}</span>
-    </div>
-  );
-}
-
-
-/* ------------------------------------------------------------------ */
-/* Six illustrative numbers — the metrics grid                         */
-/* ------------------------------------------------------------------ */
-
-
-/* ------------------------------------------------------------------ */
-/* "Not surveillance" — the compact guarantee band                    */
-/* ------------------------------------------------------------------ */
 
 const NEVER: ReadonlyArray<string> = [
   "NO KEYSTROKES",

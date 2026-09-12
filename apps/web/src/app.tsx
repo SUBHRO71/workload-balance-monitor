@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { colors } from "@workload/design-tokens";
 import { PulseLoader } from "./pulse/loader";
 import { cx, CountUp, Parallax, Reveal } from "./pulse/primitives";
 import { PulseMark, Waveform } from "./pulse/visuals";
@@ -96,31 +95,6 @@ function Hero() {
 }
 
 
-function NumbersSection() {
-  return (
-    <section className="section section--numbers" id="numbers">
-      <div className="container container--wide">
-        <div className="section__head section__head--row">
-          <div>
-            <Reveal>
-              <p className="eyebrow">THE SIX NUMBERS</p>
-            </Reveal>
-            <Reveal delay={90}>
-              <h2 className="section__title">Your numbers. Your call.</h2>
-            </Reveal>
-          </div>
-          <Reveal delay={160}>
-            <p className="demo-note">
-              <span className="demo-note__dot" aria-hidden="true" />
-              ILLUSTRATIVE DEMO DATA — NOT REAL PEOPLE, NOT REAL STATISTICS
-            </p>
-          </Reveal>
-        </div>
-        
-      </div>
-    </section>
-  );
-}
 
 function PrivacySection() {
   return (
