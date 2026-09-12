@@ -40,6 +40,13 @@ The earlier verified baseline was 14 suites / 61 tests. The proposed additions t
 - Remaining audit caveat: records are currently append-only without the planned retention/anonymization worker or retry deduplication key. Those are still required for production readiness.
 - Restart here: implement worker stale-generation and notification/job idempotency checks, then add HR/manager endpoint isolation tests and an explicit audit-retention test.
 
+### 2026-09-13 — worker safety checkpoint
+
+- Worker parsing now fails malformed or unsupported SQS jobs into the queue retry/DLQ path instead of silently acknowledging them; malformed bodies are not logged.
+- Correction invalidation outbox targets now use the organization target expected by the aggregate worker, while existing record-change targets remain backward-compatible.
+- Still open: job ID deduplication, expected disclosure-generation checks, notification delivery rechecks, and worker integration tests against SQS/DynamoDB.
+- Restart here: add generation/idempotency fields to job contracts and implement safe notification delivery before claiming W5 complete.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |

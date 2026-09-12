@@ -13,8 +13,8 @@ export const handler: SQSHandler = async (event) => {
     try {
       payload = JSON.parse(record.body) as { jobType: string; targetId: string };
     } catch {
-      console.error("Malformed SQS message body:", record.body);
-      continue;
+      // Throw so SQS redrive/DLQ policy handles malformed work; never log private payloads.
+      throw new Error("Malformed SQS message body");
     }
 
     if (
@@ -29,6 +29,8 @@ export const handler: SQSHandler = async (event) => {
       payload.jobType === "lifecycle.schedule"
     ) {
       await processLifecycleJob(store, payload as LifecycleJobPayload);
+    } else {
+      throw new Error(`Unsupported worker job type: ${payload.jobType}`);
     }
   }
 };

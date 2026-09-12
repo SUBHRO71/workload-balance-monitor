@@ -445,7 +445,7 @@ export class WorkloadStore implements AuthorizationStore {
       await this.client.send(new PutCommand({ TableName: this.tableName, Item: { ...keys.privateRecord(orgId, userId, newSK), ...updated } }));
     }
     await this.saveOutboxEvent(0, "personal.insight", `${orgId}#${userId}`);
-    await this.saveOutboxEvent(0, "publication.invalidate", `${orgId}#${userId}`);
+    await this.saveOutboxEvent(0, "publication.invalidate", orgId);
     await this.invalidateGrantsForRecord(orgId, userId, id);
     return updated;
   }
