@@ -24,8 +24,15 @@ export const workloadPreferencesSchema = z.object({
   preferredCheckInDay: z.number().int().min(1).max(7).optional(),
 }).strict();
 
+export const taskUpdateSchema = taskInputSchema.partial();
+export const checkInUpdateSchema = checkInInputSchema.partial();
+export const workloadPreferencesUpdateSchema = workloadPreferencesSchema.partial();
+
 export type TaskInput = z.infer<typeof taskInputSchema>;
+export type TaskUpdate = z.infer<typeof taskUpdateSchema>;
 export type TaskRecord = z.infer<typeof taskRecordSchema>;
 export type CheckInInput = z.infer<typeof checkInInputSchema>;
+export type CheckInUpdate = z.infer<typeof checkInUpdateSchema>;
 export type CheckInRecord = z.infer<typeof checkInRecordSchema>;
 export type WorkloadPreferences = z.infer<typeof workloadPreferencesSchema>;
+export type WorkloadPreferencesUpdate = z.infer<typeof workloadPreferencesUpdateSchema>;

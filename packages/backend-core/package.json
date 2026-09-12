@@ -12,7 +12,8 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.901.0",
     "@aws-sdk/lib-dynamodb": "3.901.0",
-    "@workload/contracts": "workspace:*"
+    "@workload/contracts": "workspace:*",
+    "@workload/domain": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

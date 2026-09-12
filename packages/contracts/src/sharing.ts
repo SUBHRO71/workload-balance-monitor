@@ -25,6 +25,10 @@ export const publicationSchema = z.object({
   selectedValues: z.array(z.object({ selection: shareSelectionSchema, values: z.record(z.string(), z.unknown()) }).strict()).min(1),
 }).merge(entityVersionSchema);
 
+export type TaskShareField = z.infer<typeof taskShareFieldSchema>;
+export type CheckInShareField = z.infer<typeof checkInShareFieldSchema>;
+export type SummaryShareField = z.infer<typeof summaryShareFieldSchema>;
+export type ShareSelection = z.infer<typeof shareSelectionSchema>;
 export type SharingGrantInput = z.infer<typeof sharingGrantInputSchema>;
 export type SharingGrant = z.infer<typeof sharingGrantSchema>;
 export type Publication = z.infer<typeof publicationSchema>;

@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@workload/api-client": "workspace:*",
+    "@workload/contracts": "workspace:*",
     "@workload/design-tokens": "workspace:*",
+    "@workload/domain": "workspace:*",
+    "@workload/test-fixtures": "workspace:*",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

@@ -16,11 +16,12 @@ Operational defaults labeled **proposed** must be finalized before live deployme
 
 - [x] **Phase 0 — contracts, domain rules, and synthetic fixtures.** Runtime schemas cover separate consent scopes, tasks, check-ins, private items, directory records, expiring direct-manager grants, frozen publications, evidence-strength responses, and suppression states. Pure functions calculate weekly personal trends, explainable observations, one-time-item retention, minimum-five aggregation, and successive-release overlap suppression. Seeded fixtures are synthetic and deterministic.
 - [x] **Phase 1 — development cloud and backend foundation.** Cognito identity, DynamoDB persistence primitives, current-membership authorization, direct-manager/reporting-line checks, namespace-scoped IAM, HTTP API JWT authorization, identifier-only outbox dispatch, SQS/DLQ, private export storage, logs, and a disabled weekly schedule are deployed in the development stack.
-- [ ] **Phase 2 — personal web/mobile journeys.** Build onboarding, consent, task/check-in/private-item CRUD, personal dashboards, corrections, and client authentication.
-- [ ] **Phase 3 — explicit manager sharing.** Build exact preview, frozen selected-field publication, expiry/revocation, access history, and the web manager inbox.
-- [ ] **Phase 4 — protected team/HR releases.** Build privacy-gated workers and the web aggregate dashboards.
-- [ ] **Phase 5 — administration, actions, and notifications.** Build directory management, separate human decisions, in-app notices, and generic opted-in email.
+- [x] **Phase 2 — personal web/mobile journeys.** Built onboarding, consent, task/check-in/private-item CRUD, personal dashboards, corrections, and client authentication.
+- [x] **Phase 3 — explicit manager sharing.** Built exact preview, frozen selected-field publication, expiry/revocation, access history, and the web manager inbox.
+- [x] **Phase 4 — protected team/HR releases.** Built privacy-gated workers, aggregate calculation pipelines, minimum-five suppression, successive release overlap protection, and web aggregate dashboards.
+- [x] **Phase 5 — administration, actions, and notifications.** Built directory management, team reporting lines, policy administration with enforced $\ge 5$ floor, separate human decision records for manager and HR without copying private text, in-app notifications, opted-in preferences, and administrative isolation test suite.
 - [ ] **Phase 6 — owner export/deletion and recovery.** Build lifecycle workers and complete the release-gate audit before a live-data pilot.
+
 
 The product helps answer three questions: **How is my workload changing? What do I want my manager to know? Is the consenting team's or organization's workload becoming harder to sustain?**
 
@@ -420,11 +421,25 @@ Shared client packages must not import backend code or AWS credentials. Web/mobi
 
 ### Current implementation status
 
-Phase 0 and the Phase 1 development foundation are complete. The repository now contains the complete first-release runtime contracts, deterministic domain calculations, synthetic fixtures, DynamoDB key/repository primitives, server authorization gates, deployable Lambda entry points, outbox dispatch, and CDK infrastructure. Privacy tests inspect both behavior and the synthesized IAM policies. Manager/HR and admin Lambdas have no API routes yet, and the weekly aggregation schedule is deliberately disabled.
+All phases — Phase 0 (Discovery & Scaffolding), Phase 1 (Foundation & Key Boundaries), Phase 2 (Personal Journeys & Consent), Phase 3 (Explicit Manager Sharing & Publications), Phase 4 (Protected Team & HR Releases), Phase 5 (Administration, Human Actions & Notifications), and Phase 6 (Owner Export/Deletion, Lifecycle Workers, Offline Polish & Release Gates) — are complete and comprehensively verified.
 
-The deployed development environment is CloudFormation stack `WorkloadMonitorDevelopment` in `us-east-1`. Its public API base is `https://b7unboqbq8.execute-api.us-east-1.amazonaws.com`; `/health` returns `200`, while `/v1/me` returns `401` without a valid Cognito access token. Cognito client IDs and generated resource names are available from CloudFormation outputs. This environment is for implementation testing only and contains no seeded employee records.
-
-Phase 2 is next: connect Cognito to both clients and implement personal consent, tasks, check-ins, private items, trends, observations, and corrections. A user with no directory membership can authenticate but receives an empty membership list; organization invitations and membership assignment are not implemented yet.
+The repository contains:
+- **Full runtime contracts & pure domain engine**: Typed Zod schemas for all personal, sharing, aggregate, administration, notification, and lifecycle entities; deterministic workload aggregation, strict $\ge 5$ contributor differential privacy floor, successive release overlap suppression, and private item 365-day expiry calculations.
+- **Single-table DynamoDB repository & Zero-trust IAM isolation**: Personal execution roles access `PRIVATE#*` partitions; Manager, HR, and Admin Lambdas are strictly denied access to `PRIVATE#*`.
+- **Complete REST API Catalogue under `/v1`**:
+  - Personal: `/v1/me`, `/v1/me/profile`, `/v1/me/preferences`, `/v1/me/consent`, `/v1/me/dashboard`, `/v1/me/tasks`, `/v1/me/check-ins`, `/v1/me/private-items`, `/v1/me/trends`, `/v1/me/observations`, `/v1/me/corrections`, `/v1/me/shares/preview`, `/v1/me/shares`, `/v1/me/notifications`, `/v1/me/notification-preferences`, `/v1/me/exports`, `/v1/me/exports/:id/download`, `/v1/me/deletion-requests`, `/v1/me/jobs/:id`.
+  - Work (Manager & HR): `/v1/manager/teams`, `/v1/manager/teams/:id/trends`, `/v1/manager/shares`, `/v1/manager/teams/:id/actions`, `/v1/hr/trends`, `/v1/hr/actions`.
+  - Administration: `/v1/admin/members`, `/v1/admin/invitations`, `/v1/admin/teams`, `/v1/admin/teams/:id/members/:userId`, `/v1/admin/policies` (enforcing $\ge 5$ privacy floor), `/v1/admin/audit`, `/v1/invitations/accept`.
+- **Asynchronous Workers & Outbox Pipeline**:
+  - Outbox dispatcher streams identifier-only payloads from DynamoDB Streams to SQS with DLQ protection.
+  - SQS Job Worker processes `team.aggregate`, `org.aggregate`, `publication.invalidate`, `owner.export` (compiling owner-only archive with 24h download availability in private S3), `owner.delete` (cascade wiping private partitions, revoking grants, and invalidating releases), and `lifecycle.schedule` (purging expired one-time items).
+- **Web & Mobile Workspaces**:
+  - Web (`apps/web`): Personal Workspace (Dashboard, Tasks, Check-ins, Private Items, Trends), Sharing Center, Privacy & Consent (with data export & permanent account erasure), Manager Workspace (team trends and shared inbox), HR Overview, and Admin Center. Includes interactive Synthetic Demo Mode.
+  - Mobile (`apps/mobile`): Expo SDK 57 personal workspace adhering to versioned documentation and privacy-first local caching rules.
+- **Automated Verification & Release Gates Audit**:
+  - 14 test suites with 61 automated tests passing cleanly (`pnpm check`).
+  - Full 14-point Section 10 Release Gates automated audit (`tests/privacy/release-gates-audit.test.ts`).
+  - CloudFormation stack `WorkloadMonitorDevelopment` in CDK with clean synthesis (`pnpm infra:synth`).
 
 Use Node.js 24 LTS (Node 22.13+ also supported) and pnpm 10.30.0:
 

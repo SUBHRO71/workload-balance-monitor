@@ -30,7 +30,7 @@ export class WorkloadMonitorStack extends Stack {
       encryption: sqs.QueueEncryption.SQS_MANAGED, visibilityTimeout: Duration.minutes(6),
       deadLetterQueue: { queue: deadLetterQueue, maxReceiveCount: 5 },
     });
-    new s3.Bucket(this, "PrivateExportBucket", {
+    const privateExportBucket = new s3.Bucket(this, "PrivateExportBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL, encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true, objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       lifecycleRules: [{ id: "ExpireOwnerExports", expiration: Duration.days(1), prefix: "owner-exports/" }],
@@ -78,11 +78,20 @@ export class WorkloadMonitorStack extends Stack {
       functionName: "workload-monitor-development-outbox", logGroup: outboxLogGroup,
       environment: { TABLE_NAME: table.tableName, JOB_QUEUE_URL: jobQueue.queueUrl },
     });
+    const jobWorkerLogGroup = new logs.LogGroup(this, "JobWorkerLogs", {
+      logGroupName: "/aws/lambda/workload-monitor-development-job-worker", retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const jobWorkerFunction = new lambdaNodejs.NodejsFunction(this, "JobWorker", {
+      ...defaults, entry: source("services/workers/src/job-worker.ts"), handler: "handler",
+      functionName: "workload-monitor-development-job-worker", logGroup: jobWorkerLogGroup,
+      environment: { TABLE_NAME: table.tableName, EXPORT_BUCKET_NAME: privateExportBucket.bucketName },
+    });
+    jobWorkerFunction.addEventSource(new eventSources.SqsEventSource(jobQueue, { batchSize: 5 }));
 
     this.addDynamoPermissions(
       personalFunction, table,
-      ["PRIVATE#*", "IDENTITY#*", "DIRECTORY#*", "OWNERGRANTS#*", "GRANT#*", "SHARESTATE#*", "SHARE#*", "INBOX#*", "OUTBOX#*", "REQUEST#*"],
-      ["PRIVATE#*", "OWNERGRANTS#*", "GRANT#*", "SHARESTATE#*", "SHARE#*", "INBOX#*", "OUTBOX#*", "REQUEST#*"],
+      ["PRIVATE#*", "IDENTITY#*", "DIRECTORY#*", "OWNERGRANTS#*", "GRANT#*", "SHARESTATE#*", "SHARE#*", "INBOX#*", "OUTBOX#*", "REQUEST#*", "NOTICE#*"],
+      ["PRIVATE#*", "OWNERGRANTS#*", "GRANT#*", "SHARESTATE#*", "SHARE#*", "INBOX#*", "OUTBOX#*", "REQUEST#*", "NOTICE#*"],
     );
     this.addDynamoPermissions(
       workFunction, table,
@@ -91,9 +100,18 @@ export class WorkloadMonitorStack extends Stack {
     );
     this.addDynamoPermissions(
       adminFunction, table,
-      ["DIRECTORY#*", "IDENTITY#*", "POLICY#*", "ADMINAUDIT#*"],
-      ["DIRECTORY#*", "IDENTITY#*", "POLICY#*", "ADMINAUDIT#*"],
+      ["DIRECTORY#*", "IDENTITY#*", "POLICY#*", "ADMINAUDIT#*", "TEAMVIEW#*", "ORGVIEW#*"],
+      ["DIRECTORY#*", "IDENTITY#*", "POLICY#*", "ADMINAUDIT#*", "TEAMVIEW#*", "ORGVIEW#*"],
     );
+    this.addDynamoPermissions(
+      jobWorkerFunction, table,
+      ["PRIVATE#*", "DIRECTORY#*", "IDENTITY#*", "OWNERGRANTS#*", "GRANT#*", "SHARE#*", "SHARESTATE#*", "INBOX#*", "TEAMVIEW#*", "ORGVIEW#*", "POLICY#*", "NOTICE#*", "ADMINAUDIT#*", "OUTBOX#*"],
+      ["PRIVATE#*", "DIRECTORY#*", "IDENTITY#*", "OWNERGRANTS#*", "GRANT#*", "SHARE#*", "SHARESTATE#*", "INBOX#*", "TEAMVIEW#*", "ORGVIEW#*", "POLICY#*", "NOTICE#*", "ADMINAUDIT#*", "OUTBOX#*"],
+    );
+    privateExportBucket.grantReadWrite(jobWorkerFunction);
+    privateExportBucket.grantRead(personalFunction);
+    personalFunction.addEnvironment("EXPORT_BUCKET_NAME", privateExportBucket.bucketName);
+
     jobQueue.grantSendMessages(outboxFunction);
     outboxFunction.addEventSource(new eventSources.DynamoEventSource(table as unknown as dynamodb.ITable, {
       startingPosition: lambda.StartingPosition.LATEST, batchSize: 10, retryAttempts: 3, bisectBatchOnError: true,
@@ -109,7 +127,15 @@ export class WorkloadMonitorStack extends Stack {
     });
     const jwtAuthorizer = new authorizers.HttpJwtAuthorizer("CognitoJwt", `https://cognito-idp.${this.region}.${this.urlSuffix}/${userPool.userPoolId}`, { jwtAudience: [webClient.userPoolClientId, mobileClient.userPoolClientId] });
     httpApi.addRoutes({ path: "/health", methods: [apigatewayv2.HttpMethod.GET], integration: new integrations.HttpLambdaIntegration("HealthIntegration", healthFunction) });
-    httpApi.addRoutes({ path: "/v1/me", methods: [apigatewayv2.HttpMethod.GET], integration: new integrations.HttpLambdaIntegration("PersonalIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/me", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("PersonalRootIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/me/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("PersonalProxyIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/invitations/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("InvitationsProxyIntegration", personalFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/manager", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkManagerRootIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/manager/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkManagerProxyIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/hr", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkHrRootIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/hr/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("WorkHrProxyIntegration", workFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/admin", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("AdminRootIntegration", adminFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
+    httpApi.addRoutes({ path: "/v1/admin/{proxy+}", methods: [apigatewayv2.HttpMethod.ANY], integration: new integrations.HttpLambdaIntegration("AdminProxyIntegration", adminFunction), authorizer: jwtAuthorizer, authorizationScopes: ["workload-monitor/read"] });
 
     const schedulerRole = new iam.Role(this, "WeeklyAggregationSchedulerRole", {
       assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
@@ -134,6 +160,7 @@ export class WorkloadMonitorStack extends Stack {
     new CfnOutput(this, "HostedUiBaseUrl", { value: userPoolDomain.baseUrl() });
     new CfnOutput(this, "TableName", { value: table.tableName });
     new CfnOutput(this, "JobQueueUrl", { value: jobQueue.queueUrl });
+    new CfnOutput(this, "ExportBucketName", { value: privateExportBucket.bucketName });
   }
 
   private addDynamoPermissions(target: lambda.Function, table: dynamodb.Table, readKeys: string[], writeKeys: string[]): void {

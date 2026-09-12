@@ -23,7 +23,28 @@ export const aggregateResponseSchema = z.object({
   if (value.state !== "available" && value.metrics !== undefined) context.addIssue({ code: "custom", message: "suppressed aggregates must omit metrics", path: ["metrics"] });
 });
 
+export const observationUpdateSchema = z.object({
+  status: z.enum(["active", "dismissed", "disputed"]),
+}).strict();
+
+export const correctionInputSchema = z.object({
+  sourceOrObservationId: idSchema,
+  disputedVersion: z.number().int().positive().optional(),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+
+export const correctionRecordSchema = correctionInputSchema.extend({
+  entityType: z.literal("CORRECTION"),
+  id: idSchema,
+  orgId: idSchema,
+  ownerId: idSchema,
+  status: z.enum(["pending", "resolved"]).default("resolved"),
+}).merge(entityVersionSchema);
+
 export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 export type SuggestionCategory = z.infer<typeof suggestionCategorySchema>;
 export type Observation = z.infer<typeof observationSchema>;
+export type ObservationUpdate = z.infer<typeof observationUpdateSchema>;
+export type CorrectionInput = z.infer<typeof correctionInputSchema>;
+export type CorrectionRecord = z.infer<typeof correctionRecordSchema>;
 export type AggregateResponse = z.infer<typeof aggregateResponseSchema>;

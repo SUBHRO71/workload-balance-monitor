@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@workload/api-client": "workspace:*",
+    "@workload/contracts": "workspace:*",
     "@workload/design-tokens": "workspace:*",
+    "@workload/domain": "workspace:*",
     "expo": "~57.0.22",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",

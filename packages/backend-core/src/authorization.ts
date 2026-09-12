@@ -2,8 +2,8 @@ import type { Membership, OrganizationRole, SharingGrant, TeamAssignment } from 
 import { isGrantReadable } from "./keys";
 
 export class AuthorizationError extends Error {
-  readonly statusCode: 401 | 403 | 404;
-  constructor(message: string, statusCode: 401 | 403 | 404 = 403) {
+  readonly statusCode: 400 | 401 | 403 | 404 | 409;
+  constructor(message: string, statusCode: 400 | 401 | 403 | 404 | 409 = 403) {
     super(message); this.name = "AuthorizationError"; this.statusCode = statusCode;
   }
 }
