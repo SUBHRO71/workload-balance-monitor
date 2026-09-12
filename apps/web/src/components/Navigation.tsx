@@ -88,25 +88,12 @@ export const Navigation: React.FC<NavigationProps> = ({
       </nav>
 
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <label
-          style={{
-            fontSize: "0.85rem",
-            color: colors.muted,
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            background: "#edf4f0",
-            padding: "4px 10px",
-            borderRadius: "6px",
-          }}
+        {isDemoMode ? <label
+          style={{ fontSize: "0.85rem", color: colors.muted, display: "flex", alignItems: "center", gap: "6px", background: "#edf4f0", padding: "4px 10px", borderRadius: "6px" }}
         >
-          <input
-            type="checkbox"
-            checked={isDemoMode}
-            onChange={() => onToggleDemo()}
-          />
+          <input type="checkbox" checked={isDemoMode} onChange={() => onToggleDemo()} />
           <strong>Synthetic Demo Mode</strong>
-        </label>
+        </label> : <span style={{ fontSize: "0.85rem", color: colors.muted }}>Authenticated workspace</span>}
         <button onClick={auth.logout} style={{ border: "1px solid #c8d8cf", background: "white", borderRadius: 6, padding: "6px 10px", cursor: "pointer" }}>Sign out</button>
       </div>
     </header>
