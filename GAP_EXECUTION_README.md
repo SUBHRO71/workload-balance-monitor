@@ -65,6 +65,12 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Still open: connect page data mutations to the API client instead of local demo state, create memberships through the invitation/admin flow, and add browser E2E coverage for role-specific routes.
 - Restart here: add `VITE_COGNITO_DOMAIN` to local web env, open `/app`, complete hosted Cognito sign-in, and verify personal navigation before wiring live page data.
 
+### 2026-09-13 — synthetic role identities seeded
+
+- Created four development-only Cognito users with `.example.invalid` emails and assigned `member`, `manager`, `hr`, and `org_admin` groups.
+- Seeded matching active organization memberships, default-off consent records, organization policy, and one manager/team assignment in the development DynamoDB table.
+- Credentials are intentionally not stored in Git; provide them only through the secure handoff to the developer. Passwords should be rotated before any shared use.
+
 ## Correct these assumptions before writing tests
 
 | Proposed expectation | Refined acceptance rule |
