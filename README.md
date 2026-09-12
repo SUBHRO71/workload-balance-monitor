@@ -23,15 +23,7 @@ A privacy-first tool that combines synthetic task loads, working-pattern signals
 
 Optional notes remain private and are excluded from team aggregates, notifications, and application logs. The initial release uses synthetic workloads and non-clinical indicators only; it does not collect keystrokes or passive device activity.
 
-## Architecture assessment
-
-The original proposal scores **6.5/10 overall**. These are design judgments, not results of a security audit or performance benchmark.
-
-| Area | Rating | Assessment |
-| --- | --- | --- |
-| Security and privacy | 6/10 | Strong principles; authorization, revocation, and aggregate disclosure controls need concrete enforcement. |
-| Smoothness and usability | 7/10 | Good dashboard concept; synchronization, mobile experience, and correction workflows need definition. |
-| Scalability and reliability | 7/10 | Lambda and DynamoDB fit the workload; queries, capacity, retries, and recovery need deliberate design. |
+## Architecture review
 
 ### Required security improvements
 
