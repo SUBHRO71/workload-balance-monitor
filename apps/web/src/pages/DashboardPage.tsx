@@ -3,6 +3,15 @@ import { colors } from "@workload/design-tokens";
 import { useWorkload } from "../context/WorkloadContext";
 import type { NavTab } from "../components/Navigation";
 
+// Extend CSSProperties so we can pass CSS custom properties (--wl-*) through
+// inline style without fighting TypeScript. All real colors still come from
+// the design-token `colors` object or the existing neutral palette already
+// used across this file (#dbe6df, #f8faf9, #eef3f0, #fff9eb/#ffe2a3) — no new
+// colors are introduced.
+type CSSVars = React.CSSProperties & { [key: `--${string}`]: string | number };
+
+const CIRCUMFERENCE = 2 * Math.PI * 54; // r=54 gauge
+
 export const DashboardPage: React.FC<{ onNavigate?: (tab: NavTab) => void }> = ({ onNavigate }) => {
   const {
     consent,
@@ -16,239 +25,475 @@ export const DashboardPage: React.FC<{ onNavigate?: (tab: NavTab) => void }> = (
   } = useWorkload();
 
   const latestTrend = trends.at(-1);
+  const manageabilityPct = latestTrend?.meanManageability
+    ? Math.min(1, Math.max(0, latestTrend.meanManageability / 5))
+    : 0;
+
+  // Recent effort history for the sparkline (oldest → newest, last 8 points)
+  const sparklinePoints = trends.slice(-8);
+  const sparklineValues = sparklinePoints.map((t) => t.effortValue);
+  const sparkMin = sparklineValues.length ? Math.min(...sparklineValues) : 0;
+  const sparkMax = sparklineValues.length ? Math.max(...sparklineValues) : 1;
+  const sparkRange = sparkMax - sparkMin || 1;
+
+  const sparkWidth = 220;
+  const sparkHeight = 56;
+  const sparkCoords = sparklineValues.map((v, i) => {
+    const x = sparklineValues.length > 1 ? (i / (sparklineValues.length - 1)) * sparkWidth : sparkWidth / 2;
+    const y = sparkHeight - ((v - sparkMin) / sparkRange) * (sparkHeight - 8) - 4;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const sparklinePath = sparkCoords.length ? `M ${sparkCoords.join(" L ")}` : "";
+
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setMounted(true), 60);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const rootVars: CSSVars = {
+    "--wl-accent": colors.accent,
+    "--wl-text": colors.text,
+    "--wl-muted": colors.muted,
+    "--wl-surface": colors.surface,
+  };
 
   return (
-    <div>
-      <div style={{ marginBottom: "28px" }}>
-        <span style={{ color: colors.accent, fontWeight: 700, fontSize: "0.85rem", letterSpacing: "0.08em" }}>
-          PERSONAL OVERVIEW
-        </span>
-        <h1 style={{ color: colors.text, margin: "6px 0 10px", fontSize: "2rem" }}>
-          How is your workload feeling?
-        </h1>
-        <p style={{ color: colors.muted, margin: 0 }}>
-          This workspace is private to you. No employer rankings, no automated surveillance, and no data shared without your explicit grant.
-        </p>
-      </div>
+    <div className="wl-root" style={rootVars}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&display=swap');
 
-      {!consent.personalProcessing ? (
-        <div
-          style={{
-            padding: "20px",
-            background: "#fff9eb",
-            border: "1px solid #ffe2a3",
-            borderRadius: "12px",
-            marginBottom: "24px",
-          }}
-        >
-          <strong style={{ color: "#8a5800" }}>⚠️ Personal processing is disabled</strong>
-          <p style={{ margin: "6px 0 0", color: "#6b4500", fontSize: "0.95rem" }}>
-            Data entry and trend derivations are currently turned off. Go to <strong>Privacy & Consent</strong> to enable personal processing.
+        .wl-root {
+          font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+          color: var(--wl-text);
+          max-width: 980px;
+        }
+        .wl-root * { box-sizing: border-box; }
+        .wl-serif { font-family: "Newsreader", Georgia, serif; }
+
+        .wl-intro { margin-bottom: 36px; }
+        .wl-intro h1 {
+          font-size: 2.15rem;
+          font-weight: 500;
+          line-height: 1.2;
+          margin: 0 0 12px;
+          color: var(--wl-text);
+          max-width: 22ch;
+        }
+        .wl-intro p {
+          margin: 0;
+          color: var(--wl-muted);
+          font-size: 0.96rem;
+          max-width: 52ch;
+          line-height: 1.55;
+        }
+
+        .wl-consent-banner {
+          padding: 16px 20px;
+          background: #fff9eb;
+          border: 1px solid #ffe2a3;
+          border-radius: 10px;
+          margin-bottom: 28px;
+        }
+        .wl-consent-banner strong { color: #8a5800; font-weight: 600; }
+        .wl-consent-banner p { margin: 6px 0 0; color: #6b4500; font-size: 0.92rem; }
+
+        /* ---- Hero: headline + gauge, one unified panel with a hairline divider ---- */
+        .wl-hero {
+          display: grid;
+          grid-template-columns: 1.15fr 1fr;
+          gap: 0;
+          border: 1px solid #dbe6df;
+          border-radius: 14px;
+          background: var(--wl-surface);
+          overflow: hidden;
+          margin-bottom: 32px;
+        }
+        .wl-hero-left, .wl-hero-right {
+          padding: 28px 30px;
+        }
+        .wl-hero-left {
+          border-right: 1px solid #eef3f0;
+        }
+        .wl-hero-eyebrow {
+          font-size: 0.8rem;
+          color: var(--wl-muted);
+          margin: 0 0 6px;
+        }
+        .wl-hero-figure {
+          font-size: 2.7rem;
+          font-weight: 500;
+          margin: 0 0 4px;
+          line-height: 1;
+        }
+        .wl-hero-sub {
+          font-size: 0.86rem;
+          color: var(--wl-muted);
+          margin: 0 0 18px;
+        }
+        .wl-sparkline-wrap { margin-top: 4px; }
+        .wl-sparkline-path {
+          fill: none;
+          stroke: var(--wl-accent);
+          stroke-width: 2;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 700;
+          stroke-dashoffset: 700;
+          transition: stroke-dashoffset 1.1s cubic-bezier(0.2, 0.6, 0.2, 1);
+        }
+        .wl-root.wl-mounted .wl-sparkline-path { stroke-dashoffset: 0; }
+        .wl-sparkline-caption {
+          margin-top: 6px;
+          font-size: 0.78rem;
+          color: var(--wl-muted);
+        }
+
+        .wl-gauge-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          text-align: center;
+        }
+        .wl-gauge-ring-bg { fill: none; stroke: #eef3f0; stroke-width: 8; }
+        .wl-gauge-ring-fg {
+          fill: none;
+          stroke: var(--wl-accent);
+          stroke-width: 8;
+          stroke-linecap: round;
+          transform: rotate(-90deg);
+          transform-origin: 60px 60px;
+          transition: stroke-dashoffset 1.2s cubic-bezier(0.2, 0.6, 0.2, 1);
+        }
+        .wl-gauge-value {
+          font-size: 1.5rem;
+          font-weight: 500;
+        }
+        .wl-gauge-label {
+          font-size: 0.78rem;
+          color: var(--wl-muted);
+          margin-top: 2px;
+        }
+        .wl-gauge-caption {
+          margin-top: 14px;
+          font-size: 0.82rem;
+          color: var(--wl-muted);
+        }
+        .wl-gauge-caption b { color: var(--wl-text); font-weight: 600; }
+
+        /* ---- Check-ins timeline ---- */
+        .wl-section { margin-top: 36px; }
+        .wl-section-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          margin-bottom: 16px;
+        }
+        .wl-section-head h2 {
+          font-size: 1.2rem;
+          font-weight: 500;
+          margin: 0;
+          color: var(--wl-text);
+        }
+        .wl-add-checkin {
+          background: none;
+          border: none;
+          padding: 0;
+          color: var(--wl-accent);
+          font-size: 0.88rem;
+          font-weight: 600;
+          cursor: pointer;
+          border-bottom: 1px solid transparent;
+        }
+        .wl-add-checkin:hover, .wl-add-checkin:focus-visible {
+          border-bottom-color: var(--wl-accent);
+        }
+
+        .wl-timeline { display: flex; flex-direction: column; }
+        .wl-timeline-row {
+          display: grid;
+          grid-template-columns: 100px 20px 1fr;
+          align-items: center;
+          padding: 9px 0;
+        }
+        .wl-timeline-row + .wl-timeline-row { border-top: 1px solid #eef3f0; }
+        .wl-timeline-date { font-size: 0.85rem; color: var(--wl-muted); }
+        .wl-timeline-dot-col { display: flex; justify-content: center; }
+        .wl-timeline-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: var(--wl-accent);
+        }
+        .wl-timeline-bar-track {
+          height: 6px;
+          border-radius: 3px;
+          background: #eef3f0;
+          overflow: hidden;
+        }
+        .wl-timeline-bar-fill {
+          height: 100%;
+          border-radius: 3px;
+          background: var(--wl-accent);
+        }
+        .wl-empty {
+          padding: 22px 0;
+          color: var(--wl-muted);
+          font-size: 0.92rem;
+        }
+
+        /* ---- Insights ---- */
+        .wl-insight {
+          display: grid;
+          grid-template-columns: 3px 1fr auto;
+          gap: 18px;
+          align-items: start;
+          padding: 16px 4px;
+        }
+        .wl-insight + .wl-insight { border-top: 1px solid #eef3f0; }
+        .wl-insight-bar { align-self: stretch; background: var(--wl-accent); border-radius: 2px; }
+        .wl-insight-meta {
+          display: flex; align-items: center; gap: 10px;
+          font-size: 0.78rem; color: var(--wl-muted);
+          margin-bottom: 5px;
+        }
+        .wl-insight-category { color: var(--wl-accent); font-weight: 600; }
+        .wl-insight-title {
+          font-size: 1.02rem;
+          font-weight: 600;
+          margin: 0 0 4px;
+          color: var(--wl-text);
+        }
+        .wl-insight-explanation {
+          margin: 0;
+          font-size: 0.9rem;
+          line-height: 1.5;
+          color: var(--wl-muted);
+          max-width: 62ch;
+        }
+        .wl-dismiss {
+          background: none;
+          border: none;
+          padding: 4px 2px;
+          color: var(--wl-muted);
+          font-size: 0.82rem;
+          cursor: pointer;
+          border-bottom: 1px solid transparent;
+          white-space: nowrap;
+        }
+        .wl-dismiss:hover, .wl-dismiss:focus-visible { color: var(--wl-text); border-bottom-color: currentColor; }
+
+        /* ---- Tasks table ---- */
+        .wl-table-wrap { border: 1px solid #dbe6df; border-radius: 12px; overflow: hidden; }
+        .wl-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; text-align: left; }
+        .wl-table thead th {
+          padding: 11px 18px;
+          background: #f8faf9;
+          color: var(--wl-muted);
+          font-weight: 500;
+          font-size: 0.82rem;
+          border-bottom: 1px solid #dbe6df;
+        }
+        .wl-table tbody tr + tr td { border-top: 1px solid #eef3f0; }
+        .wl-table td { padding: 11px 18px; }
+        .wl-task-title { font-weight: 600; color: var(--wl-text); }
+        .wl-task-date, .wl-task-effort { color: var(--wl-muted); }
+        .wl-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--wl-text); }
+        .wl-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #9aa39c; }
+        .wl-status-dot.done { background: #137333; }
+
+        button:focus-visible, a:focus-visible {
+          outline: 2px solid var(--wl-accent);
+          outline-offset: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .wl-sparkline-path, .wl-gauge-ring-fg { transition: none !important; }
+        }
+
+        @media (max-width: 760px) {
+          .wl-hero { grid-template-columns: 1fr; }
+          .wl-hero-left { border-right: none; border-bottom: 1px solid #eef3f0; }
+          .wl-timeline-row { grid-template-columns: 84px 16px 1fr; }
+        }
+      `}</style>
+
+      <div className={mounted ? "wl-mounted" : ""} style={{ display: "contents" }}>
+        <div className="wl-intro">
+          <h1 className="wl-serif">How is your workload feeling this week?</h1>
+          <p>
+            This workspace is private to you. No employer rankings, no automated surveillance, and no data
+            shared without your explicit grant.
           </p>
         </div>
-      ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-        {/* Quick Check-in Shortcut */}
-        <div
-          style={{
-            background: colors.surface,
-            padding: "20px",
-            borderRadius: "14px",
-            border: "1px solid #dbe6df",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-          }}
-        >
-          <h2 style={{ fontSize: "1.2rem", margin: "0 0 12px", color: colors.text }}>
-            🌱 Recent Check-ins
-          </h2>
-          {checkIns.length === 0 ? (
-            <p style={{ color: colors.muted, fontSize: "0.88rem", margin: "0 0 14px" }}>
-              No check-ins recorded yet.
+        {!consent.personalProcessing ? (
+          <div className="wl-consent-banner">
+            <strong>Personal processing is disabled</strong>
+            <p>
+              Data entry and trend derivations are currently turned off. Go to Privacy &amp; Consent to enable
+              personal processing.
             </p>
+          </div>
+        ) : null}
+
+        {/* Hero: effort trend + manageability gauge, one panel, hairline divider */}
+        <div className="wl-hero">
+          <div className="wl-hero-left">
+            <p className="wl-hero-eyebrow">Weekly logged effort</p>
+            <p className="wl-hero-figure wl-serif">
+              {latestTrend ? (
+                <>
+                  {latestTrend.effortValue}
+                  <span style={{ fontSize: "1.1rem", fontWeight: 400, color: colors.muted, marginLeft: 6 }}>
+                    {latestTrend.effortUnit}
+                  </span>
+                </>
+              ) : (
+                "No data yet"
+              )}
+            </p>
+            <p className="wl-hero-sub">
+              {preferences.weeklyCapacity?.value
+                ? `Target capacity: ${preferences.weeklyCapacity.value} ${preferences.weeklyCapacity.unit}`
+                : "No target capacity set"}
+            </p>
+
+            {sparkCoords.length > 1 ? (
+              <div className="wl-sparkline-wrap">
+                <svg width={sparkWidth} height={sparkHeight} viewBox={`0 0 ${sparkWidth} ${sparkHeight}`}>
+                  <path className="wl-sparkline-path" d={sparklinePath} />
+                </svg>
+                <p className="wl-sparkline-caption">Last {sparkCoords.length} logged weeks</p>
+              </div>
+            ) : (
+              <p className="wl-sparkline-caption">Log a few more weeks to see your trend.</p>
+            )}
+          </div>
+
+          <div className="wl-hero-right">
+            <div className="wl-gauge-wrap">
+              <svg width="120" height="120" viewBox="0 0 120 120">
+                <circle className="wl-gauge-ring-bg" cx="60" cy="60" r="54" />
+                <circle
+                  className="wl-gauge-ring-fg"
+                  cx="60"
+                  cy="60"
+                  r="54"
+                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDashoffset={mounted ? CIRCUMFERENCE * (1 - manageabilityPct) : CIRCUMFERENCE}
+                />
+                <text x="60" y="56" textAnchor="middle" className="wl-gauge-value" fill={colors.text}>
+                  {latestTrend?.meanManageability ? latestTrend.meanManageability.toFixed(1) : "–"}
+                </text>
+                <text x="60" y="74" textAnchor="middle" className="wl-gauge-label" fill={colors.muted}>
+                  / 5
+                </text>
+              </svg>
+              <p className="wl-gauge-caption">
+                Average manageability · evidence coverage <b>{evidenceStrength}</b>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Check-ins */}
+        <div className="wl-section">
+          <div className="wl-section-head">
+            <h2>Recent check-ins</h2>
+            <button className="wl-add-checkin" onClick={() => onNavigate?.("checkins")}>
+              Add check-in
+            </button>
+          </div>
+
+          {checkIns.length === 0 ? (
+            <p className="wl-empty">No check-ins recorded yet.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
-              {checkIns.slice(0, 3).map((ci) => (
-                <div key={ci.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#f8faf9", borderRadius: "8px", fontSize: "0.9rem" }}>
-                  <span style={{ color: colors.muted }}>{ci.checkInDate}</span>
-                  <span style={{ fontWeight: 600, color: colors.text }}>
-                    {"★".repeat(ci.manageability)}{"☆".repeat(5 - ci.manageability)} {ci.manageability}/5
+            <div className="wl-timeline">
+              {checkIns.slice(0, 5).map((ci) => (
+                <div className="wl-timeline-row" key={ci.id}>
+                  <span className="wl-timeline-date">{ci.checkInDate}</span>
+                  <span className="wl-timeline-dot-col">
+                    <span className="wl-timeline-dot" />
+                  </span>
+                  <span className="wl-timeline-bar-track">
+                    <span
+                      className="wl-timeline-bar-fill"
+                      style={{ width: `${(ci.manageability / 5) * 100}%` }}
+                    />
                   </span>
                 </div>
               ))}
             </div>
           )}
-          <button
-            onClick={() => onNavigate?.("checkins")}
-            style={{
-              padding: "9px 16px",
-              background: colors.accent,
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "8px",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: "0.9rem",
-            }}
-          >
-            + Add Check-in
-          </button>
         </div>
 
-        {/* Current Summary Card */}
-        <div
-          style={{
-            background: colors.surface,
-            padding: "20px",
-            borderRadius: "14px",
-            border: "1px solid #dbe6df",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-          }}
-        >
-          <h2 style={{ fontSize: "1.2rem", margin: "0 0 12px", color: colors.text }}>
-            📊 Current Workload Status
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div style={{ padding: "12px", background: "#f8faf9", borderRadius: "8px" }}>
-              <div style={{ fontSize: "0.85rem", color: colors.muted }}>Weekly Logged Effort</div>
-              <div style={{ fontSize: "1.6rem", fontWeight: 700, color: colors.text }}>
-                {latestTrend ? `${latestTrend.effortValue} ${latestTrend.effortUnit}` : "No data yet"}
-              </div>
-              {preferences.weeklyCapacity?.value ? (
-                <div style={{ fontSize: "0.82rem", color: colors.muted, marginTop: "4px" }}>
-                  Target capacity: {preferences.weeklyCapacity.value} {preferences.weeklyCapacity.unit}
-                </div>
-              ) : null}
-            </div>
-
-            <div style={{ padding: "12px", background: "#f8faf9", borderRadius: "8px" }}>
-              <div style={{ fontSize: "0.85rem", color: colors.muted }}>Average Manageability</div>
-              <div style={{ fontSize: "1.6rem", fontWeight: 700, color: colors.text }}>
-                {latestTrend?.meanManageability ? `${latestTrend.meanManageability.toFixed(1)} / 5` : "N/A"}
-              </div>
-            </div>
-
-            <div style={{ fontSize: "0.85rem", color: colors.muted }}>
-              Evidence Coverage: <span style={{ fontWeight: 600, color: colors.text }}>{evidenceStrength}</span>
-            </div>
+        {/* Observations */}
+        <div className="wl-section">
+          <div className="wl-section-head">
+            <h2>Explainable observations</h2>
           </div>
-        </div>
-      </div>
-
-      {/* Observations and Suggestions */}
-      <div style={{ marginTop: "30px" }}>
-        <h2 style={{ fontSize: "1.3rem", color: colors.text, marginBottom: "14px" }}>
-          💡 Explainable Observations
-        </h2>
-        {insights.length === 0 ? (
-          <div style={{ padding: "24px", background: colors.surface, border: "1px solid #dbe6df", borderRadius: "12px", color: colors.muted }}>
-            No workload anomalies detected for this window. Observations are generated deterministically based on your logged history.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {insights.map((ins, i) => (
-              <div
-                key={i}
-                style={{
-                  background: colors.surface,
-                  border: "1px solid #dbe6df",
-                  borderLeft: `5px solid ${colors.accent}`,
-                  padding: "16px 20px",
-                  borderRadius: "10px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: "16px",
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        background: "#eaf2ee",
-                        color: colors.accent,
-                      }}
-                    >
-                      {ins.category}
-                    </span>
-                    <span style={{ fontSize: "0.8rem", color: colors.muted }}>
-                      Evidence: {ins.evidenceStrength}
-                    </span>
+          {insights.length === 0 ? (
+            <p className="wl-empty">
+              No workload anomalies detected for this window. Observations are generated deterministically
+              based on your logged history.
+            </p>
+          ) : (
+            <div>
+              {insights.map((ins, i) => (
+                <div className="wl-insight" key={i}>
+                  <div className="wl-insight-bar" />
+                  <div>
+                    <div className="wl-insight-meta">
+                      <span className="wl-insight-category">{ins.category}</span>
+                      <span>Evidence: {ins.evidenceStrength}</span>
+                    </div>
+                    <p className="wl-insight-title">{ins.title}</p>
+                    <p className="wl-insight-explanation">{ins.explanation}</p>
                   </div>
-                  <strong style={{ display: "block", color: colors.text, fontSize: "1.05rem", marginBottom: "4px" }}>
-                    {ins.title}
-                  </strong>
-                  <p style={{ margin: 0, color: colors.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-                    {ins.explanation}
-                  </p>
+                  <button className="wl-dismiss" onClick={() => dismissInsight(ins.title)}>
+                    Dismiss
+                  </button>
                 </div>
-                <button
-                  onClick={() => dismissInsight(ins.title)}
-                  style={{
-                    padding: "6px 12px",
-                    background: "transparent",
-                    border: "1px solid #c9d8d0",
-                    borderRadius: "6px",
-                    color: colors.muted,
-                    fontSize: "0.85rem",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Recent Tasks */}
-      <div style={{ marginTop: "30px" }}>
-        <h2 style={{ fontSize: "1.3rem", color: colors.text, marginBottom: "14px" }}>
-          Recent Tasks
-        </h2>
-        <div style={{ background: colors.surface, border: "1px solid #dbe6df", borderRadius: "12px", overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.92rem" }}>
-            <thead>
-              <tr style={{ background: "#f8faf9", borderBottom: "1px solid #dbe6df", color: colors.muted }}>
-                <th style={{ padding: "12px 16px" }}>Title</th>
-                <th style={{ padding: "12px 16px" }}>Date</th>
-                <th style={{ padding: "12px 16px" }}>Effort</th>
-                <th style={{ padding: "12px 16px" }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.slice(0, 5).map((task) => (
-                <tr key={task.id} style={{ borderBottom: "1px solid #eef3f0" }}>
-                  <td style={{ padding: "12px 16px", fontWeight: 600, color: colors.text }}>{task.title}</td>
-                  <td style={{ padding: "12px 16px", color: colors.muted }}>{task.workDate}</td>
-                  <td style={{ padding: "12px 16px", color: colors.text }}>
-                    {task.effort.value} {task.effort.unit}
-                  </td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <span
-                      style={{
-                        padding: "3px 8px",
-                        borderRadius: "4px",
-                        fontSize: "0.8rem",
-                        fontWeight: 600,
-                        background: task.status === "done" ? "#e6f4ea" : "#f1f3f4",
-                        color: task.status === "done" ? "#137333" : "#3c4043",
-                      }}
-                    >
-                      {task.status}
-                    </span>
-                  </td>
-                </tr>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+        </div>
+
+        {/* Tasks */}
+        <div className="wl-section">
+          <div className="wl-section-head">
+            <h2>Recent tasks</h2>
+          </div>
+          <div className="wl-table-wrap">
+            <table className="wl-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Date</th>
+                  <th>Effort</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.slice(0, 5).map((task) => (
+                  <tr key={task.id}>
+                    <td className="wl-task-title">{task.title}</td>
+                    <td className="wl-task-date">{task.workDate}</td>
+                    <td className="wl-task-effort">
+                      {task.effort.value} {task.effort.unit}
+                    </td>
+                    <td>
+                      <span className="wl-status">
+                        <span className={`wl-status-dot${task.status === "done" ? " done" : ""}`} />
+                        {task.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
