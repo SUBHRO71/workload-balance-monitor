@@ -9,15 +9,21 @@ export const SettingsPage: React.FC = () => {
   const [unit, setUnit] = useState<"hours" | "points">(preferences.weeklyCapacity?.unit ?? "hours");
   const [timezone, setTimezone] = useState<string>(preferences.timezone);
   const [savedMsg, setSavedMsg] = useState<string>("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updatePreferences({
-      weeklyCapacity: { value: Number(capacity), unit },
-      timezone,
-    });
-    setSavedMsg("Settings saved successfully.");
-    setTimeout(() => setSavedMsg(""), 3000);
+    setSaving(true);
+    setSavedMsg("");
+    try {
+      await updatePreferences({ weeklyCapacity: { value: Number(capacity), unit }, timezone });
+      setSavedMsg("Settings saved successfully.");
+      setTimeout(() => setSavedMsg(""), 3000);
+    } catch (error) {
+      setSavedMsg(error instanceof Error ? error.message : "Settings could not be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -88,6 +94,7 @@ export const SettingsPage: React.FC = () => {
 
         <button
           type="submit"
+          disabled={saving}
           style={{
             padding: "10px 20px",
             background: colors.accent,
@@ -95,14 +102,15 @@ export const SettingsPage: React.FC = () => {
             border: "none",
             borderRadius: "6px",
             fontWeight: 600,
-            cursor: "pointer",
+            cursor: saving ? "wait" : "pointer",
+            opacity: saving ? 0.7 : 1,
           }}
         >
-          Save Preferences
+          {saving ? "Saving…" : "Save Preferences"}
         </button>
 
         {savedMsg ? (
-          <span style={{ marginLeft: "14px", color: colors.accent, fontWeight: 500, fontSize: "0.9rem" }}>
+          <span role="status" style={{ marginLeft: "14px", color: savedMsg === "Settings saved successfully." ? colors.accent : "#9b2c2c", fontWeight: 500, fontSize: "0.9rem" }}>
             {savedMsg}
           </span>
         ) : null}

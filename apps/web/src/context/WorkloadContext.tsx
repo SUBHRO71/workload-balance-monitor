@@ -10,6 +10,8 @@ import type {
   TaskInput,
   TaskRecord,
   WorkloadPreferences,
+  NotificationPreferences,
+  NotificationRecord,
 } from "@workload/contracts";
 import {
   calculateWeeklyWorkload,
@@ -20,6 +22,7 @@ import {
 import { useAuth } from "../auth";
 
 interface WorkloadContextType {
+  workspaceLoadError?: string;
   isDemoMode: boolean;
   setDemoMode: (enabled: boolean) => void;
   consent: ConsentScopes;
@@ -40,6 +43,11 @@ interface WorkloadContextType {
   insights: PersonalInsight[];
   evidenceStrength: EvidenceStrength;
   dismissInsight: (title: string) => void;
+  notifications: NotificationRecord[];
+  notificationPreferences: NotificationPreferences;
+  markNotificationRead: (id: string, read: boolean) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  updateNotificationPreferences: (prefs: NotificationPreferences) => Promise<void>;
 }
 
 const defaultConsent: ConsentScopes = {
@@ -53,7 +61,9 @@ const WorkloadContext = createContext<WorkloadContextType | null>(null);
 
 export function WorkloadProvider({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
-  const orgId = auth.memberships.find((membership) => membership.status === "active")?.orgId;
+  const activeMembership = auth.memberships.find((membership) => membership.status === "active");
+  const orgId = activeMembership?.orgId;
+  const roleWorkspaceOnly = (activeMembership?.roles ?? []).some((role) => ["manager", "hr", "org_admin"].includes(role));
   const api = useMemo(() => new WorkloadApiClient({
     baseUrl: import.meta.env.VITE_API_URL as string,
     getAccessToken: async () => auth.accessToken,
@@ -71,19 +81,54 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
 
   const [privateItems, setPrivateItems] = useState<PrivateItemRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
+    inAppEnabled: true,
+    emailEnabled: false,
+    weeklyDigestEnabled: false,
+  });
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string>();
 
   useEffect(() => {
-    if (!auth.accessToken || !orgId) return;
-    void Promise.all([api.getConsent(), api.getPreferences(), api.listTasks({ limit: 100 }), api.listCheckIns({ limit: 100 }), api.listPrivateItems({ limit: 100 })])
-      .then(([nextConsent, nextPreferences, taskPage, checkInPage, privatePage]) => {
-        setConsent(nextConsent);
-        setPreferences(nextPreferences);
-        setTasks(taskPage.items);
-        setCheckIns(checkInPage.items);
-        setPrivateItems(privatePage.items);
+    if (!auth.accessToken || !orgId || roleWorkspaceOnly) return;
+    let cancelled = false;
+    setWorkspaceLoadError(undefined);
+    const failures: string[] = [];
+    const load = async <T,>(label: string, request: Promise<T>, apply: (value: T) => void) => {
+      try {
+        const value = await request;
+        if (!cancelled) apply(value);
+      } catch (error) {
+        failures.push(label);
+        console.error(`workspace_${label}_load_failed`, error instanceof Error ? error.message : "Unknown");
+      }
+    };
+    void Promise.all([
+      load("consent", api.getConsent(), setConsent),
+      load("preferences", api.getPreferences(), setPreferences),
+      load("tasks", api.listTasks({ limit: 100 }), (page) => setTasks(page.items)),
+      load("check-ins", api.listCheckIns({ limit: 100 }), (page) => setCheckIns(page.items)),
+      load("private-items", api.listPrivateItems({ limit: 100 }), (page) => setPrivateItems(page.items)),
+    ]).then(() => {
+      if (!cancelled && failures.length > 0) {
+        setWorkspaceLoadError(`Some workspace data could not be loaded: ${failures.join(", ")}. Refresh and try again.`);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [api, auth.accessToken, orgId, roleWorkspaceOnly]);
+
+  useEffect(() => {
+    if (!auth.accessToken || !orgId || roleWorkspaceOnly) return;
+    void Promise.all([api.listNotifications(), api.getNotificationPreferences()])
+      .then(([notificationPage, nextPreferences]) => {
+        setNotifications(notificationPage.items);
+        setNotificationPreferences(nextPreferences);
       })
-      .catch((error: unknown) => console.error("workspace_load_failed", error instanceof Error ? error.message : "Unknown"));
-  }, [api, auth.accessToken, orgId]);
+      .catch(() => {
+        // An empty inbox is an honest state when notification delivery is unavailable.
+        setNotifications([]);
+      });
+  }, [api, auth.accessToken, orgId, roleWorkspaceOnly]);
 
   const [dismissedInsightTitles, setDismissedInsightTitles] = useState<Set<string>>(new Set());
 
@@ -171,9 +216,26 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
     setDismissedInsightTitles((prev) => new Set([...prev, title]));
   };
 
+  const markNotificationRead = async (id: string, read: boolean) => {
+    const updated = await api.updateNotification(id, { read });
+    setNotifications((prev) => prev.map((notification) => notification.id === id ? updated : notification));
+  };
+
+  const markAllNotificationsRead = async () => {
+    const unread = notifications.filter((notification) => !notification.read);
+    await Promise.all(unread.map((notification) => api.updateNotification(notification.id, { read: true })));
+    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
+  };
+
+  const updateNotificationPreferences = async (prefs: NotificationPreferences) => {
+    const updated = await api.updateNotificationPreferences(prefs);
+    setNotificationPreferences(updated);
+  };
+
   return (
     <WorkloadContext.Provider
       value={{
+        ...(workspaceLoadError ? { workspaceLoadError } : {}),
         isDemoMode,
         setDemoMode,
         consent,
@@ -194,6 +256,11 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
         insights,
         evidenceStrength: strength,
         dismissInsight,
+        notifications,
+        notificationPreferences,
+        markNotificationRead,
+        markAllNotificationsRead,
+        updateNotificationPreferences,
       }}
     >
       {children}

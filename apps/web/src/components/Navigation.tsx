@@ -43,25 +43,14 @@ const PERSONAL_UTILITY_IDS: NavTab[] = ["notifications", "privacy", "settings"];
 export const Navigation: React.FC<NavigationProps> = ({ activeTab, onSelectTab, allowedTabs }) => {
   const auth = useAuth();
 
-  const isWorkTab = (t: NavTab) => t === "manager" || t === "hr" || t === "admin";
   const allowed = allowedTabs ?? ALL_TABS.map((t) => t.id);
 
-  // Determine which tabs to show based on the active tab's workspace
-  let visibleIds: NavTab[];
-  let utilityIds: NavTab[] = [];
-
-  if (isWorkTab(activeTab)) {
-    // Work workspace: show ONLY the active role tab
-    visibleIds = [activeTab];
-  } else {
-    // Personal workspace: show personal content tabs + utility tabs
-    visibleIds = PERSONAL_TAB_IDS.filter((id) => allowed.includes(id));
-    utilityIds = PERSONAL_UTILITY_IDS.filter((id) => allowed.includes(id));
-  }
+  const roleWorkspaceOnly = (["manager", "hr", "admin"] as NavTab[]).some((id) => allowed.includes(id));
+  const visibleIds = roleWorkspaceOnly ? [] : PERSONAL_TAB_IDS.filter((id) => allowed.includes(id));
+  const utilityIds = roleWorkspaceOnly ? [] : PERSONAL_UTILITY_IDS.filter((id) => allowed.includes(id));
 
   const visibleTabs = ALL_TABS.filter((t) => visibleIds.includes(t.id));
   const utilityTabs = ALL_TABS.filter((t) => utilityIds.includes(t.id));
-
   const workspaceLabel = WORKSPACE_LABEL[activeTab] ?? "My workspace";
 
   const renderBtn = (tab: { id: NavTab; label: string; icon: string }, variant: "primary" | "utility" = "primary") => {

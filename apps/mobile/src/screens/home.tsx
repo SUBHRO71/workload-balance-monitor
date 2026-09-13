@@ -20,6 +20,12 @@ type Tab = "dashboard" | "tasks" | "checkin" | "private" | "consent";
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
+const localDate = () => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+};
+
 export function HomeScreen() {
   const auth = useAuth();
   const activeMembership = auth.memberships.find((m) => m.status === "active");
@@ -76,6 +82,11 @@ export function HomeScreen() {
 
   const handleAddTask = async () => {
     if (!taskTitle.trim()) return;
+    const parsedHours = Number(taskHours);
+    if (!Number.isFinite(parsedHours) || parsedHours <= 0) {
+      Alert.alert("Check the effort", "Enter an effort value greater than zero.");
+      return;
+    }
     if (!consent?.personalProcessing) {
       Alert.alert("Processing disabled", "Enable personal processing in Privacy Controls first.");
       return;
@@ -83,7 +94,7 @@ export function HomeScreen() {
     setSubmitting(true);
     try {
       const created = await api.createTask(
-        { title: taskTitle.trim(), workDate: new Date().toISOString().slice(0, 10), effort: { value: Number(taskHours) || 1, unit: "hours" }, status: "planned" },
+        { title: taskTitle.trim(), workDate: localDate(), effort: { value: parsedHours, unit: "hours" }, status: "planned" },
         `task-${Date.now()}`,
       );
       setTasks((prev) => [created, ...prev]);
@@ -103,7 +114,7 @@ export function HomeScreen() {
     setSubmitting(true);
     try {
       const created = await api.createCheckIn(
-        { checkInDate: new Date().toISOString().slice(0, 10), manageability: selectedRating, ...(checkInNote.trim() ? { privateNote: checkInNote.trim() } : {}) },
+        { checkInDate: localDate(), manageability: selectedRating, ...(checkInNote.trim() ? { privateNote: checkInNote.trim() } : {}) },
         `checkin-${Date.now()}`,
       );
       setCheckIns((prev) => [created, ...prev]);

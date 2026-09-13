@@ -98,6 +98,13 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 
 - Web task and check-in pages now load and mutate authenticated AWS API records instead of React-only fixture state. Consent and preferences also load/save through the API, and write failures are visible in the forms.
 - The member sharing page now resolves the active direct-manager assignment from `GET /v1/me/managers`, requests a server projection preview, creates a frozen publication, lists grants, and revokes through the API. No manager identity or sample publication is hard-coded.
+
+### 2026-09-13 — synthetic development workspace populated
+
+- Added `tools/seed-demo.mjs`, an idempotent development-only seed utility that obtains the active CLI profile in memory and never writes credentials.
+- Seeded `org-demo` with six canonical synthetic members: one manager and five non-manager contributors, a `demo-team` assignment, editable task/check-in records with lookup keys, ongoing private items, generic inbox notices, and independent notification preferences.
+- Published synthetic team and organization aggregate releases only after explicitly verifying at least five non-manager contributors. Final run reported `membersSeeded: 6`, `teamId: demo-team`, and `source: synthetic`.
+- Refresh or sign out/in to reload role pages. The member workspace shows tasks/check-ins/private items/notices; Manager shows the assigned team release; HR shows the organization release; Admin shows members and the team.
 - The manager “Shared Publications” tab now loads the real manager inbox. It starts empty and shows only publication-selected values; the page no longer inserts a sample direct-report publication. Team aggregates and manager action history also use their APIs.
 - Added direct-manager discovery coverage to `sharing-lifecycle.test.ts`. Full validation passed: 18 suites / 75 tests, plus lint, all workspace typechecks, and production builds.
 - Deployed the API update to the synthetic AWS development stack. Repaired four old synthetic consent rows to the current schema with every optional scope still off, and added the missing synthetic manager/team lookup pointer.
@@ -106,6 +113,13 @@ Current remote checkpoint: `eaba8a7` on `origin/main`. The last complete `pnpm c
 - Browser automation could not attach to the open Chrome surface in this session. Manual hosted-login UI verification remains required even though deployed Lambda/DynamoDB behavior was exercised.
 - Still local/not live in the web context: private-item create/delete, owner export download UX, account deletion UX, and dismissed personal insights. Do not describe those pages as fully integrated.
 - Restart here: hard-refresh `http://localhost:5173/app`, sign in as the synthetic member, verify the persisted validation task/check-in, then open Sharing and verify the existing live grant. Sign out through Cognito, sign in as the synthetic manager, and verify the same projection in Shared Publications. Next wire the explicitly listed local-only operations above.
+
+### 2026-09-13 — member workspace seed repair
+
+- Diagnosed disabled member controls as a malformed synthetic `CONSENT` record, not a role or consent-policy denial. The record had `personalProcessing: true` but omitted required `schemaVersion: 1`, so the personal Lambda rejected the consent read with a Zod validation error.
+- Corrected `tools/seed-demo.mjs` to persist schema-valid consent records and reran it successfully for all six synthetic members. A direct read verified the live member now has `personalProcessing: true`, `schemaVersion: 1`, and `version: 1`.
+- Changed the web workspace bootstrap from an all-or-nothing load to independent consent, preferences, task, check-in, and private-item loads. A failure in one collection no longer discards successful consent and disables unrelated controls; partial failures now produce a visible safe error banner.
+- Web typecheck and targeted ESLint validation passed. Restart here: hard-refresh or sign out/in as `member@example.invalid`, then verify task, check-in, and private-item creation in the browser.
 
 ## Correct these assumptions before writing tests
 

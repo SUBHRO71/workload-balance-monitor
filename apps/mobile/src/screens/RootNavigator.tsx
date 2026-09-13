@@ -23,11 +23,8 @@ export function RootNavigator() {
     return <LoginScreen onLogin={auth.login} loading={false} error={auth.error} />;
   }
 
-  // Check if this account has a work role
-  const activeMembership = auth.memberships.find((m) => m.status === "active");
-  const roles = activeMembership?.roles ?? [];
-  const workRoles = roles.filter((r) => (WORK_ROLES as readonly string[]).includes(r));
-
+  const activeMembership = auth.memberships.find((membership) => membership.status === "active");
+  const workRoles = (activeMembership?.roles ?? []).filter((role) => (WORK_ROLES as readonly string[]).includes(role));
   if (workRoles.length > 0) {
     return <WorkOnlyScreen roles={workRoles as ("manager" | "hr" | "org_admin")[]} onSignOut={auth.logout} />;
   }

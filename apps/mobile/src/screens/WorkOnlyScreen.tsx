@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, spacing } from "@workload/design-tokens";
 import type { OrganizationRole } from "@workload/contracts";
 
@@ -20,10 +20,13 @@ interface Props {
   onSignOut: () => void;
 }
 
+const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL ?? "http://localhost:5173").replace(/\/$/, "");
+
 export function WorkOnlyScreen({ roles, onSignOut }: Props) {
   const primary = roles[0];
   const label = primary ? (ROLE_LABELS[primary] ?? primary) : "Work role";
   const desc = primary ? (ROLE_DESC[primary] ?? "Your work dashboard is available on the website.") : "";
+  const path = primary === "manager" ? "/app/manager" : primary === "hr" ? "/app/hr" : "/app/admin";
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -36,6 +39,9 @@ export function WorkOnlyScreen({ roles, onSignOut }: Props) {
           {"\n\n"}
           This mobile app is for personal workload tracking only. It does not include work dashboards.
         </Text>
+        <TouchableOpacity style={styles.button} onPress={() => void Linking.openURL(`${WEB_URL}${path}`)}>
+          <Text style={styles.buttonText}>Open {label} workspace</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={onSignOut}>
           <Text style={styles.buttonText}>Sign out</Text>
         </TouchableOpacity>

@@ -33,6 +33,7 @@ export const SharingPage: React.FC = () => {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [selectedCheckInIds, setSelectedCheckInIds] = useState<string[]>([]);
   const [preview, setPreview] = useState<Publication | null>(null);
+  const [previewSignature, setPreviewSignature] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -65,20 +66,34 @@ export const SharingPage: React.FC = () => {
     };
   };
 
+  const signatureFor = (input: SharingGrantInput) => JSON.stringify(input);
+
   const handlePreview = async () => {
+    if (!managerId || !hasSelection) return;
+    if (fromDate > toDate) { setError("The start date must be on or before the end date."); return; }
     setBusy(true); setError("");
-    try { setPreview(await api.createSharePreview(buildInput())); }
+    try {
+      const input = buildInput();
+      setPreview(await api.createSharePreview(input));
+      setPreviewSignature(signatureFor(input));
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to build preview"); }
     finally { setBusy(false); }
   };
 
   const handleConfirm = async () => {
     if (!preview) return;
+    const input = buildInput();
+    if (signatureFor(input) !== previewSignature) {
+      setPreview(null);
+      setError("Something changed after this preview. Review the snapshot again before publishing.");
+      return;
+    }
     setBusy(true); setError("");
     try {
-      const result = await api.createShare(buildInput());
+      const result = await api.createShare(input);
       setGrants((current) => [result.grant, ...current]);
-      setPreview(null); setSelectedTaskIds([]); setSelectedCheckInIds([]); setIsComposing(false);
+      setPreview(null); setPreviewSignature(""); setSelectedTaskIds([]); setSelectedCheckInIds([]); setIsComposing(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to publish share"); }
     finally { setBusy(false); }
   };
@@ -94,7 +109,7 @@ export const SharingPage: React.FC = () => {
 
   const toggle = (id: string, selected: string[], update: React.Dispatch<React.SetStateAction<string[]>>) => {
     update(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
-    setPreview(null);
+    setPreview(null); setPreviewSignature("");
   };
   const hasSelection = selectedTaskIds.length + selectedCheckInIds.length > 0;
 
@@ -102,7 +117,8 @@ export const SharingPage: React.FC = () => {
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: "0 0 4px", fontSize: "1.8rem", color: colors.text }}>Explicit Sharing Center</h1>
+          <p style={{ margin: "0 0 8px", color: colors.accent, fontSize: ".75rem", fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase" }}>Owner-controlled sharing</p>
+          <h1 style={{ margin: "0 0 4px", fontSize: "1.8rem", color: colors.text }}>Sharing center</h1>
           <p style={{ margin: 0, color: colors.muted }}>Saved records remain private. Only exact fields in a confirmed snapshot become visible to the selected direct manager.</p>
         </div>
         <button disabled={managers.length === 0} onClick={() => { setIsComposing((value) => !value); setPreview(null); }} style={{ padding: "10px 18px", border: 0, borderRadius: 8, background: colors.accent, color: "white", fontWeight: 600, cursor: managers.length ? "pointer" : "not-allowed" }}>
@@ -113,7 +129,7 @@ export const SharingPage: React.FC = () => {
       {error && <div role="alert" style={{ padding: 12, color: "#b3261e", background: "#fce8e6", borderRadius: 8 }}>{error}</div>}
 
       {isComposing && <section style={{ background: colors.surface, border: `2px solid ${colors.accent}`, borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
-        <h2 style={{ margin: 0, color: colors.text }}>Choose the exact snapshot</h2>
+        <div><p style={{ margin: "0 0 4px", color: colors.accent, fontSize: ".75rem", fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" }}>Step 1 of 2</p><h2 style={{ margin: 0, color: colors.text }}>Choose the exact snapshot</h2></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
           <label>Direct manager<select value={managerId} onChange={(event) => { setManagerId(event.target.value); setPreview(null); }} style={{ display: "block", width: "100%", padding: 8 }}>{managers.map((manager) => <option key={`${manager.teamId}-${manager.userId}`} value={manager.userId}>{manager.displayName} ({manager.teamId})</option>)}</select></label>
           <label>From<input type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPreview(null); }} style={{ display: "block", width: "100%", padding: 8 }} /></label>
@@ -122,10 +138,12 @@ export const SharingPage: React.FC = () => {
         </div>
         <div><h3>Tasks</h3>{tasks.length === 0 ? <p style={{ color: colors.muted }}>No saved tasks.</p> : tasks.map((task) => <label key={task.id} style={{ display: "block", margin: "8px 0" }}><input type="checkbox" checked={selectedTaskIds.includes(task.id)} onChange={() => toggle(task.id, selectedTaskIds, setSelectedTaskIds)} /> <strong>{task.title}</strong> — {task.workDate}</label>)}</div>
         <div><h3>Check-ins</h3><p style={{ color: colors.muted, fontSize: ".85rem" }}>Only date and manageability are selectable. Private notes have no sharing path.</p>{checkIns.length === 0 ? <p style={{ color: colors.muted }}>No saved check-ins.</p> : checkIns.map((checkIn) => <label key={checkIn.id} style={{ display: "block", margin: "8px 0" }}><input type="checkbox" checked={selectedCheckInIds.includes(checkIn.id)} onChange={() => toggle(checkIn.id, selectedCheckInIds, setSelectedCheckInIds)} /> {checkIn.checkInDate} — manageability {checkIn.manageability}/5</label>)}</div>
-        <button disabled={!hasSelection || !managerId || busy} onClick={() => void handlePreview()} style={{ alignSelf: "flex-start", padding: "10px 18px" }}>{busy ? "Working…" : "Preview server projection"}</button>
+        <p style={{ margin: 0, color: colors.muted, fontSize: ".84rem" }}>Only the fields shown in the review step are published. Private notes are never selectable.</p>
+        <button disabled={!hasSelection || !managerId || busy} onClick={() => void handlePreview()} style={{ alignSelf: "flex-start", padding: "10px 18px", border: 0, borderRadius: 8, background: colors.accent, color: "white", fontWeight: 700, opacity: !hasSelection || !managerId || busy ? .55 : 1 }}>{busy ? "Working…" : "Review snapshot"}</button>
         {preview && (
           <div style={{ padding: 16, background: "#f0f7f3", border: "1px solid #a3c9b3", borderRadius: 8 }}>
-            <h3 style={{ marginTop: 0 }}>What the manager will see</h3>
+            <p style={{ margin: "0 0 4px", color: colors.accent, fontSize: ".75rem", fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" }}>Step 2 of 2</p>
+            <h3 style={{ marginTop: 0 }}>Review exactly what the manager will see</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: 14 }}>
               {preview.selectedValues.map((item, idx) => {
                 const effort = item.values.effort as { value?: unknown; unit?: unknown } | undefined;

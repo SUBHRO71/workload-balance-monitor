@@ -7,7 +7,7 @@ import {
   NotSurveillance,
 } from "./pulse/sections";
 import { Navigation, type NavTab } from "./components/Navigation";
-import { WorkloadProvider } from "./context/WorkloadContext";
+import { WorkloadProvider, useWorkload } from "./context/WorkloadContext";
 import { DashboardPage } from "./pages/DashboardPage";
 import { TasksPage } from "./pages/TasksPage";
 import { CheckInsPage } from "./pages/CheckInsPage";
@@ -21,6 +21,37 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AuthProvider, useAuth } from "./auth";
+
+const ROUTE_TO_TAB: Record<string, NavTab> = {
+  "": "dashboard",
+  tasks: "tasks",
+  "check-ins": "checkins",
+  checkins: "checkins",
+  private: "private",
+  trends: "trends",
+  sharing: "sharing",
+  notifications: "notifications",
+  privacy: "privacy",
+  settings: "settings",
+  manager: "manager",
+  hr: "hr",
+  admin: "admin",
+};
+
+const TAB_TO_ROUTE: Record<NavTab, string> = {
+  dashboard: "",
+  tasks: "tasks",
+  checkins: "check-ins",
+  private: "private",
+  trends: "trends",
+  sharing: "sharing",
+  manager: "manager",
+  hr: "hr",
+  admin: "admin",
+  notifications: "notifications",
+  privacy: "privacy",
+  settings: "settings",
+};
 
 function Nav() {
   return (
@@ -189,38 +220,46 @@ function LandingPage() {
 function DashboardRoute() {
   const auth = useAuth();
 
-  if (auth.loading) return <AuthLoading />;
-  if (!auth.authenticated) return <LoginPage />;
-
   const activeMembership = auth.memberships.find((membership) => membership.status === "active");
   const roles = activeMembership?.roles ?? [];
-
-  // Build role-scoped allowed tabs: work roles get only their tab; personal role gets personal tabs.
   const isManager = roles.includes("manager");
   const isHr = roles.includes("hr");
   const isAdmin = roles.includes("org_admin");
-  const isWorkRole = isManager || isHr || isAdmin;
-
-  const allowedTabs: NavTab[] = isWorkRole
-    ? [
-        ...(isManager ? (["manager"] as NavTab[]) : []),
-        ...(isHr ? (["hr"] as NavTab[]) : []),
-        ...(isAdmin ? (["admin"] as NavTab[]) : []),
-      ]
-    : ["dashboard", "tasks", "checkins", "private", "trends", "sharing", "notifications", "privacy", "settings"];
-
-  // Default tab: first allowed tab
-  const defaultTab = allowedTabs[0] ?? "dashboard";
-  const urlSegment = window.location.pathname.split("/")[2] as NavTab | undefined;
+  const workTabs: NavTab[] = [
+    ...(isManager ? (["manager"] as NavTab[]) : []),
+    ...(isHr ? (["hr"] as NavTab[]) : []),
+    ...(isAdmin ? (["admin"] as NavTab[]) : []),
+  ];
+  const allowedTabs: NavTab[] = workTabs.length > 0 ? workTabs : [
+    "dashboard", "tasks", "checkins", "private", "trends", "sharing", "notifications", "privacy", "settings",
+  ];
+  const defaultTab: NavTab = allowedTabs[0] ?? "dashboard";
+  const urlSegment = ROUTE_TO_TAB[window.location.pathname.split("/")[2] ?? ""];
   const [activeTab, setActiveTab] = useState<NavTab>(
     urlSegment && allowedTabs.includes(urlSegment) ? urlSegment : defaultTab,
   );
+
+  useEffect(() => {
+    if (!allowedTabs.includes(activeTab)) setActiveTab(defaultTab);
+  }, [activeTab, allowedTabs.join("|")]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const routeTab = ROUTE_TO_TAB[window.location.pathname.split("/")[2] ?? ""] ?? defaultTab;
+      setActiveTab(allowedTabs.includes(routeTab) ? routeTab : defaultTab);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [allowedTabs.join("|"), defaultTab]);
+
+  if (auth.loading) return <AuthLoading />;
+  if (!auth.authenticated) return <LoginPage />;
 
   const selectedTab = allowedTabs.includes(activeTab) ? activeTab : defaultTab;
   const selectTab = (tab: NavTab) => {
     if (!allowedTabs.includes(tab)) return;
     setActiveTab(tab);
-    window.history.pushState({}, "", tab === "dashboard" ? "/app" : `/app/${tab}`);
+    window.history.pushState({}, "", tab === "dashboard" ? "/app" : `/app/${TAB_TO_ROUTE[tab]}`);
   };
 
   return (
@@ -230,7 +269,8 @@ function DashboardRoute() {
         onSelectTab={selectTab}
         allowedTabs={allowedTabs}
       />
-      <main style={{ maxWidth: "1000px", margin: "0 auto", padding: "30px 20px" }}>
+      <WorkspaceLoadNotice />
+      <main className="workspace-main">
         {selectedTab === "dashboard" && <DashboardPage onNavigate={selectTab} />}
         {selectedTab === "tasks" && <TasksPage />}
         {selectedTab === "checkins" && <CheckInsPage />}
@@ -246,6 +286,12 @@ function DashboardRoute() {
       </main>
     </WorkloadProvider>
   );
+}
+
+function WorkspaceLoadNotice() {
+  const { workspaceLoadError } = useWorkload();
+  if (!workspaceLoadError) return null;
+  return <div role="alert" className="workspace-load-error">{workspaceLoadError}</div>;
 }
 
 function AuthLoading({ message = "Loading your workspace…" }: { message?: string }) {
