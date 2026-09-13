@@ -1,34 +1,19 @@
-import React, { useState } from "react";
+import React from "react";
 import { colors } from "@workload/design-tokens";
 import { useWorkload } from "../context/WorkloadContext";
+import type { NavTab } from "../components/Navigation";
 
-export const DashboardPage: React.FC = () => {
+export const DashboardPage: React.FC<{ onNavigate?: (tab: NavTab) => void }> = ({ onNavigate }) => {
   const {
     consent,
     preferences,
     tasks,
+    checkIns,
     trends,
     insights,
     evidenceStrength,
-    addCheckIn,
     dismissInsight,
   } = useWorkload();
-
-  const [rating, setRating] = useState<number>(3);
-  const [note, setNote] = useState<string>("");
-  const [submittedMessage, setSubmittedMessage] = useState<string>("");
-
-  const handleCheckInSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addCheckIn({
-      checkInDate: new Date().toISOString().slice(0, 10),
-      manageability: rating,
-      privateNote: note.trim() || undefined,
-    });
-    setSubmittedMessage("Check-in recorded privately.");
-    setNote("");
-    setTimeout(() => setSubmittedMessage(""), 4000);
-  };
 
   const latestTrend = trends.at(-1);
 
@@ -64,7 +49,7 @@ export const DashboardPage: React.FC = () => {
       ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-        {/* Quick Check-in Card */}
+        {/* Quick Check-in Shortcut */}
         <div
           style={{
             background: colors.surface,
@@ -75,76 +60,39 @@ export const DashboardPage: React.FC = () => {
           }}
         >
           <h2 style={{ fontSize: "1.2rem", margin: "0 0 12px", color: colors.text }}>
-            🌱 Voluntary Check-in
+            🌱 Recent Check-ins
           </h2>
-          <p style={{ color: colors.muted, fontSize: "0.88rem", margin: "0 0 14px" }}>
-            How manageable does your workload feel today? (1: Very difficult — 5: Very manageable)
-          </p>
-
-          <form onSubmit={handleCheckInSubmit}>
-            <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
-              {[1, 2, 3, 4, 5].map((val) => (
-                <button
-                  type="button"
-                  key={val}
-                  onClick={() => setRating(val)}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: rating === val ? `2px solid ${colors.accent}` : "1px solid #c9d8d0",
-                    background: rating === val ? "#eaf2ee" : "#ffffff",
-                    fontWeight: rating === val ? 700 : 500,
-                    color: colors.text,
-                    cursor: "pointer",
-                  }}
-                >
-                  {val}
-                </button>
+          {checkIns.length === 0 ? (
+            <p style={{ color: colors.muted, fontSize: "0.88rem", margin: "0 0 14px" }}>
+              No check-ins recorded yet.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
+              {checkIns.slice(0, 3).map((ci) => (
+                <div key={ci.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#f8faf9", borderRadius: "8px", fontSize: "0.9rem" }}>
+                  <span style={{ color: colors.muted }}>{ci.checkInDate}</span>
+                  <span style={{ fontWeight: 600, color: colors.text }}>
+                    {"★".repeat(ci.manageability)}{"☆".repeat(5 - ci.manageability)} {ci.manageability}/5
+                  </span>
+                </div>
               ))}
             </div>
-
-            <label style={{ display: "block", fontSize: "0.85rem", color: colors.muted, marginBottom: "6px" }}>
-              Private note (owner-only, never shared):
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Awaiting review, blocked by dependencies..."
-              rows={3}
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "8px",
-                border: "1px solid #c9d8d0",
-                boxSizing: "border-box",
-                fontFamily: "inherit",
-                fontSize: "0.9rem",
-                marginBottom: "12px",
-              }}
-            />
-
-            <button
-              type="submit"
-              disabled={!consent.personalProcessing}
-              style={{
-                padding: "10px 18px",
-                background: colors.accent,
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: 600,
-                cursor: consent.personalProcessing ? "pointer" : "not-allowed",
-              }}
-            >
-              Save Check-in
-            </button>
-            {submittedMessage ? (
-              <span style={{ marginLeft: "12px", color: colors.accent, fontSize: "0.9rem", fontWeight: 500 }}>
-                {submittedMessage}
-              </span>
-            ) : null}
-          </form>
+          )}
+          <button
+            onClick={() => onNavigate?.("checkins")}
+            style={{
+              padding: "9px 16px",
+              background: colors.accent,
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "8px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: "0.9rem",
+            }}
+          >
+            + Add Check-in
+          </button>
         </div>
 
         {/* Current Summary Card */}

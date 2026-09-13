@@ -70,9 +70,11 @@ export const ManagerPage: React.FC = () => {
   }, [api, auth.accessToken, orgId]);
 
   const [teamAggregates, setTeamAggregates] = useState<MockTeamAggregate[]>([]);
+  const [aggregatesLoading, setAggregatesLoading] = useState(true);
 
   useEffect(() => {
     if (!auth.accessToken || !orgId) return;
+    setAggregatesLoading(true);
     void api.getManagerTeams().then(async ({ items }) => {
       const aggregates = await Promise.all(items.map(async ({ teamId }): Promise<MockTeamAggregate> => {
         const result = await api.getTeamTrends(teamId);
@@ -90,7 +92,8 @@ export const ManagerPage: React.FC = () => {
       }));
       setTeamAggregates(aggregates);
       setSelectedTeamId((current) => current || aggregates[0]?.teamId || "");
-    }).catch(() => setTeamAggregates([]));
+    }).catch(() => setTeamAggregates([]))
+      .finally(() => setAggregatesLoading(false));
   }, [api, auth.accessToken, orgId]);
 
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -217,7 +220,17 @@ export const ManagerPage: React.FC = () => {
       {/* Team Aggregates Tab */}
       {activeTab === "aggregates" && (
         <section style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {aggregatesLoading && (
+            <p style={{ color: colors.muted }}>Loading team aggregates…</p>
+          )}
+          {!aggregatesLoading && teamAggregates.length === 0 && (
+            <div style={{ padding: "20px", background: "#fef7e0", border: "1px solid #feefc3", borderRadius: "8px", color: "#7a4100" }}>
+              No assigned teams found for your account. Contact an administrator to assign you to a team.
+            </div>
+          )}
+          {!aggregatesLoading && teamAggregates.length > 0 && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "0.9rem", color: colors.muted, fontWeight: 600 }}>Select Team:</span>
             {teamAggregates.map((t) => (
               <button
@@ -314,6 +327,8 @@ export const ManagerPage: React.FC = () => {
               </div>
             )}
           </div>
+            </>
+          )}
         </section>
       )}
 

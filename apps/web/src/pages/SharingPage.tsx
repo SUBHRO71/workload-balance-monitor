@@ -123,7 +123,29 @@ export const SharingPage: React.FC = () => {
         <div><h3>Tasks</h3>{tasks.length === 0 ? <p style={{ color: colors.muted }}>No saved tasks.</p> : tasks.map((task) => <label key={task.id} style={{ display: "block", margin: "8px 0" }}><input type="checkbox" checked={selectedTaskIds.includes(task.id)} onChange={() => toggle(task.id, selectedTaskIds, setSelectedTaskIds)} /> <strong>{task.title}</strong> — {task.workDate}</label>)}</div>
         <div><h3>Check-ins</h3><p style={{ color: colors.muted, fontSize: ".85rem" }}>Only date and manageability are selectable. Private notes have no sharing path.</p>{checkIns.length === 0 ? <p style={{ color: colors.muted }}>No saved check-ins.</p> : checkIns.map((checkIn) => <label key={checkIn.id} style={{ display: "block", margin: "8px 0" }}><input type="checkbox" checked={selectedCheckInIds.includes(checkIn.id)} onChange={() => toggle(checkIn.id, selectedCheckInIds, setSelectedCheckInIds)} /> {checkIn.checkInDate} — manageability {checkIn.manageability}/5</label>)}</div>
         <button disabled={!hasSelection || !managerId || busy} onClick={() => void handlePreview()} style={{ alignSelf: "flex-start", padding: "10px 18px" }}>{busy ? "Working…" : "Preview server projection"}</button>
-        {preview && <div style={{ padding: 16, background: "#f0f7f3", border: "1px solid #a3c9b3", borderRadius: 8 }}><h3 style={{ marginTop: 0 }}>What the manager will see</h3><pre style={{ background: "white", padding: 12, overflowX: "auto" }}>{JSON.stringify(preview.selectedValues, null, 2)}</pre><button disabled={busy} onClick={() => void handleConfirm()} style={{ padding: "10px 18px", background: colors.accent, color: "white", border: 0, borderRadius: 6 }}>Confirm and publish</button></div>}
+        {preview && (
+          <div style={{ padding: 16, background: "#f0f7f3", border: "1px solid #a3c9b3", borderRadius: 8 }}>
+            <h3 style={{ marginTop: 0 }}>What the manager will see</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: 14 }}>
+              {preview.selectedValues.map((item, idx) => {
+                const effort = item.values.effort as { value?: unknown; unit?: unknown } | undefined;
+                const title = typeof item.values.title === "string" ? item.values.title : item.selection.recordType === "check_in" ? "Voluntary check-in" : "Shared workload item";
+                const date = typeof item.values.workDate === "string" ? item.values.workDate : typeof item.values.checkInDate === "string" ? item.values.checkInDate : "—";
+                const effortLabel = effort?.value !== undefined ? `${String(effort.value)} ${String(effort.unit ?? "")}` : item.values.manageability !== undefined ? `Manageability ${String(item.values.manageability)}/5` : "—";
+                return (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "white", border: "1px solid #c9d8d0", borderRadius: 6, fontSize: "0.9rem" }}>
+                    <div>
+                      <strong style={{ color: "#276749" }}>{title}</strong>
+                      <span style={{ color: "#52635a", fontSize: "0.82rem", marginLeft: 10 }}>{date}</span>
+                    </div>
+                    <span style={{ color: "#276749", fontWeight: 600, fontSize: "0.88rem" }}>{effortLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button disabled={busy} onClick={() => void handleConfirm()} style={{ padding: "10px 18px", background: "#276749", color: "white", border: 0, borderRadius: 6, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}>Confirm and publish</button>
+          </div>
+        )}
       </section>}
 
       <section><h2>Active & past sharing grants</h2>{grants.length === 0 ? <p style={{ color: colors.muted }}>No sharing grants created yet.</p> : grants.map((grant) => <div key={grant.id} style={{ background: colors.surface, border: "1px solid #dbe6df", borderRadius: 10, padding: 16, marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 12 }}><div><strong>{grant.status.toUpperCase()}</strong><div style={{ color: colors.muted, marginTop: 4 }}>Manager: {managers.find((manager) => manager.userId === grant.recipientManagerId)?.displayName ?? grant.recipientManagerId}</div><small>{grant.selections.length} selection(s), expires {grant.expiresAt.slice(0, 10)}</small></div>{grant.status === "active" && <button disabled={busy} onClick={() => void handleRevoke(grant.id)}>Revoke access</button>}</div>)}</section>

@@ -1,5 +1,10 @@
-import { HomeScreen } from './src/screens/home';
+﻿import { AuthProvider } from "./src/auth";
+import { RootNavigator } from "./src/screens/RootNavigator";
 
 export default function App() {
-  return <HomeScreen />;
+  return (
+    <AuthProvider>
+      <RootNavigator />
+    </AuthProvider>
+  );
 }

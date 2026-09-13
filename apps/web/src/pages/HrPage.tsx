@@ -1,74 +1,95 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { WorkloadApiClient } from "@workload/api-client";
 import { colors } from "@workload/design-tokens";
-import type { HumanActionRecord } from "@workload/contracts";
-
-interface MockOrgAggregate {
-  state: "available" | "insufficient_contributors" | "unsafe_overlap" | "invalid";
-  range: { startDate: string; endDate: string };
-  generatedAt: string;
-  evidenceStrength: "limited" | "developing" | "consistent";
-  metrics?: Array<{
-    key: "meanWeeklyEffort" | "meanManageability";
-    value: number;
-    contributorCountBand: "5-9" | "10-19" | "20+";
-  }>;
-  reason?: string;
-}
+import type { AggregateResponse, HumanActionRecord } from "@workload/contracts";
+import { useAuth } from "../auth";
 
 export const HrPage: React.FC = () => {
-  const [activeScenario, setActiveScenario] = useState<"available" | "insufficient" | "overlap">("available");
-  const [hrActions, setHrActions] = useState<HumanActionRecord[]>([
-    {
-      id: "act-hr-1",
-      orgId: "demo-org",
-      scope: "hr",
-      authorId: "user-hr-01",
-      authorName: "People Operations Lead",
-      rationale: "Organization-wide average effort remains elevated above 37 hours across cohorts. Initiating company-wide 'Focus Friday' pilot to reduce meeting load.",
-      status: "in_progress",
-      followUpAt: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ]);
-  const [newHrActionRationale, setNewHrActionRationale] = useState("");
-  const [newHrActionFollowUp, setNewHrActionFollowUp] = useState("");
+  const auth = useAuth();
+  const orgId = auth.memberships.find((m) => m.status === "active")?.orgId;
+  const api = useMemo(
+    () =>
+      new WorkloadApiClient({
+        baseUrl: import.meta.env.VITE_API_URL as string,
+        getAccessToken: async () => auth.accessToken,
+        ...(orgId ? { orgId } : {}),
+      }),
+    [auth.accessToken, orgId],
+  );
 
-  const scenarios: Record<string, MockOrgAggregate> = {
-    available: {
-      state: "available",
-      range: { startDate: "2026-03-01", endDate: "2026-03-07" },
-      generatedAt: "2026-03-08T00:00:00.000Z",
-      evidenceStrength: "consistent",
-      metrics: [
-        { key: "meanWeeklyEffort", value: 37.8, contributorCountBand: "10-19" },
-        { key: "meanManageability", value: 3.9, contributorCountBand: "10-19" },
-      ],
-    },
-    insufficient: {
-      state: "insufficient_contributors",
-      range: { startDate: "2026-03-01", endDate: "2026-03-07" },
-      generatedAt: "2026-03-08T00:00:00.000Z",
-      evidenceStrength: "limited",
-      reason: "At least 5 distinct consenting contributors are required to disclose aggregate metrics",
-    },
-    overlap: {
-      state: "unsafe_overlap",
-      range: { startDate: "2026-03-08", endDate: "2026-03-14" },
-      generatedAt: "2026-03-15T00:00:00.000Z",
-      evidenceStrength: "developing",
-      reason: "The contributor change is too small to safely publish a successive release",
-    },
+  const [aggregate, setAggregate] = useState<AggregateResponse | null>(null);
+  const [aggregateLoading, setAggregateLoading] = useState(true);
+  const [aggregateError, setAggregateError] = useState("");
+
+  const [actions, setActions] = useState<HumanActionRecord[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(true);
+  const [actionsError, setActionsError] = useState("");
+
+  const [newRationale, setNewRationale] = useState("");
+  const [newFollowUp, setNewFollowUp] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    if (!auth.accessToken || !orgId) return;
+    setAggregateLoading(true);
+    void api
+      .getOrgTrends()
+      .then((result) => setAggregate(result))
+      .catch((cause: unknown) =>
+        setAggregateError(
+          cause instanceof Error ? cause.message : "Unable to load organization aggregate",
+        ),
+      )
+      .finally(() => setAggregateLoading(false));
+  }, [api, auth.accessToken, orgId]);
+
+  useEffect(() => {
+    if (!auth.accessToken || !orgId) return;
+    setActionsLoading(true);
+    void api
+      .listHrActions()
+      .then(({ items }) => setActions(items))
+      .catch((cause: unknown) =>
+        setActionsError(
+          cause instanceof Error ? cause.message : "Unable to load HR actions",
+        ),
+      )
+      .finally(() => setActionsLoading(false));
+  }, [api, auth.accessToken, orgId]);
+
+  const recordAction = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newRationale) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const created = await api.createHrAction({
+        rationale: newRationale,
+        status: "open",
+        ...(newFollowUp
+          ? { followUpAt: new Date(`${newFollowUp}T00:00:00.000Z`).toISOString() }
+          : {}),
+      });
+      setActions((prev) => [created, ...prev]);
+      setNewRationale("");
+      setNewFollowUp("");
+    } catch (cause) {
+      setSubmitError(
+        cause instanceof Error ? cause.message : "Failed to record action",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
-
-  const aggregate = scenarios[activeScenario]!;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Header */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
           <h1 style={{ margin: 0, fontSize: "1.8rem", color: colors.text }}>
-            HR Overview: Protected Organization Releases
+            HR Overview: Organization Releases
           </h1>
           <span
             style={{
@@ -84,10 +105,12 @@ export const HrPage: React.FC = () => {
           </span>
         </div>
         <p style={{ margin: 0, color: colors.muted, fontSize: "0.95rem" }}>
-          Organization-level approved aggregates, trends, and evidence coverage. Strictly no individual lookup, employee ranking, or team drill-down.
+          Organization-level approved aggregates, trends, and evidence coverage. Strictly no
+          individual lookup, employee ranking, or team drill-down.
         </p>
       </div>
 
+      {/* Privacy baseline notice */}
       <div
         style={{
           background: "#e6f4ea",
@@ -103,58 +126,14 @@ export const HrPage: React.FC = () => {
       >
         <span style={{ fontSize: "1.2rem" }}>🛡️</span>
         <div>
-          <strong>Strict Privacy Baseline:</strong> Releases require at least 5 distinct consenting contributors per reporting window (<code>consent.organizationAggregation = true</code>). Successive release overlap suppression prevents differential identification when team composition changes.
+          <strong>Strict Privacy Baseline:</strong> Releases require at least 5 distinct consenting
+          contributors per reporting window (<code>consent.organizationAggregation = true</code>).
+          Successive release overlap suppression prevents differential identification when
+          organization composition changes.
         </div>
       </div>
 
-      {/* Scenario selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <span style={{ fontSize: "0.85rem", color: colors.muted, fontWeight: 600 }}>Demo Scenario:</span>
-        <button
-          onClick={() => setActiveScenario("available")}
-          style={{
-            padding: "6px 12px",
-            borderRadius: "6px",
-            border: "1px solid #dbe6df",
-            background: activeScenario === "available" ? colors.accent : colors.surface,
-            color: activeScenario === "available" ? "#ffffff" : colors.text,
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
-        >
-          Eligible Cohort (Disclosed)
-        </button>
-        <button
-          onClick={() => setActiveScenario("insufficient")}
-          style={{
-            padding: "6px 12px",
-            borderRadius: "6px",
-            border: "1px solid #dbe6df",
-            background: activeScenario === "insufficient" ? colors.accent : colors.surface,
-            color: activeScenario === "insufficient" ? "#ffffff" : colors.text,
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
-        >
-          Under Threshold (&lt;5 Consenting)
-        </button>
-        <button
-          onClick={() => setActiveScenario("overlap")}
-          style={{
-            padding: "6px 12px",
-            borderRadius: "6px",
-            border: "1px solid #dbe6df",
-            background: activeScenario === "overlap" ? colors.accent : colors.surface,
-            color: activeScenario === "overlap" ? "#ffffff" : colors.text,
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
-        >
-          Unsafe Overlap Shift
-        </button>
-      </div>
-
-      {/* Aggregate Report Card */}
+      {/* Organization Aggregate Card */}
       <div
         style={{
           background: colors.surface,
@@ -166,70 +145,106 @@ export const HrPage: React.FC = () => {
           gap: "18px",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}
+        >
           <div>
             <h2 style={{ margin: 0, fontSize: "1.2rem", color: colors.text }}>
-              Weekly Organization Release ({aggregate.range.startDate} to {aggregate.range.endDate})
+              Organization Weekly Release
             </h2>
-            <span style={{ fontSize: "0.85rem", color: colors.muted }}>
-              Generated: {new Date(aggregate.generatedAt).toLocaleString()} | Evidence: {aggregate.evidenceStrength.toUpperCase()}
-            </span>
+            {aggregate && (
+              <span style={{ fontSize: "0.85rem", color: colors.muted }}>
+                Window: {aggregate.range.from} to {aggregate.range.to} | Generated:{" "}
+                {aggregate.generatedAt
+                  ? new Date(aggregate.generatedAt).toLocaleString()
+                  : "—"}{" "}
+                | Evidence: {aggregate.evidenceStrength.toUpperCase()}
+              </span>
+            )}
           </div>
-
-          <span
-            style={{
-              padding: "4px 12px",
-              borderRadius: "8px",
-              fontSize: "0.8rem",
-              fontWeight: 600,
-              background:
-                aggregate.state === "available"
-                  ? "#e6f4ea"
-                  : aggregate.state === "unsafe_overlap"
-                  ? "#fce8e6"
-                  : "#fef7e0",
-              color:
-                aggregate.state === "available"
-                  ? "#137333"
-                  : aggregate.state === "unsafe_overlap"
-                  ? "#c5221f"
-                  : "#b06000",
-            }}
-          >
-            STATE: {aggregate.state.toUpperCase()}
-          </span>
+          {aggregate && (
+            <span
+              style={{
+                padding: "4px 12px",
+                borderRadius: "8px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                background:
+                  aggregate.state === "available"
+                    ? "#e6f4ea"
+                    : aggregate.state === "unsafe_overlap"
+                      ? "#fce8e6"
+                      : "#fef7e0",
+                color:
+                  aggregate.state === "available"
+                    ? "#137333"
+                    : aggregate.state === "unsafe_overlap"
+                      ? "#c5221f"
+                      : "#b06000",
+              }}
+            >
+              STATE: {aggregate.state.toUpperCase()}
+            </span>
+          )}
         </div>
 
-        {aggregate.state === "available" && aggregate.metrics && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
-            {aggregate.metrics.map((metric) => (
-              <div
-                key={metric.key}
-                style={{
-                  background: "#f9fbfa",
-                  border: "1px solid #eef3f0",
-                  borderRadius: "8px",
-                  padding: "16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
-                <span style={{ fontSize: "0.85rem", color: colors.muted }}>
-                  {metric.key === "meanWeeklyEffort" ? "Mean Weekly Effort" : "Mean Manageability"}
-                </span>
-                <span style={{ fontSize: "1.8rem", fontWeight: 700, color: colors.accent }}>
-                  {metric.value} {metric.key === "meanWeeklyEffort" ? "hrs" : "/ 5"}
-                </span>
-                <span style={{ fontSize: "0.75rem", color: colors.muted }}>
-                  Cohort Contributor Band: <strong>{metric.contributorCountBand} members</strong>
-                </span>
-              </div>
-            ))}
+        {aggregateLoading && (
+          <p style={{ color: colors.muted, margin: 0 }}>Loading organization aggregate…</p>
+        )}
+        {aggregateError && (
+          <div
+            role="alert"
+            style={{ padding: "12px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}
+          >
+            {aggregateError}
           </div>
         )}
 
-        {aggregate.state !== "available" && (
+        {!aggregateLoading && aggregate?.state === "available" && aggregate.metrics && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {aggregate.metrics
+              .filter((m) => m.key !== "capacityRatio")
+              .map((metric) => (
+                <div
+                  key={metric.key}
+                  style={{
+                    background: "#f9fbfa",
+                    border: "1px solid #eef3f0",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <span style={{ fontSize: "0.85rem", color: colors.muted }}>
+                    {metric.key === "meanWeeklyEffort" ? "Mean Weekly Effort" : "Mean Manageability"}
+                  </span>
+                  <span style={{ fontSize: "1.8rem", fontWeight: 700, color: colors.accent }}>
+                    {metric.value} {metric.key === "meanWeeklyEffort" ? "hrs" : "/ 5"}
+                  </span>
+                  <span style={{ fontSize: "0.75rem", color: colors.muted }}>
+                    Cohort Contributor Band:{" "}
+                    <strong>{metric.contributorCountBand} members</strong>
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {!aggregateLoading && aggregate?.state && aggregate.state !== "available" && (
           <div
             style={{
               background: aggregate.state === "unsafe_overlap" ? "#fce8e6" : "#fef7e0",
@@ -243,68 +258,88 @@ export const HrPage: React.FC = () => {
             <strong>🔒 Release Suppressed:</strong> {aggregate.reason}
           </div>
         )}
+
+        {!aggregateLoading && !aggregate && !aggregateError && (
+          <p style={{ color: colors.muted, margin: 0 }}>No organization release is available yet.</p>
+        )}
       </div>
 
       {/* Organization Human Actions */}
-      <div style={{ background: colors.surface, padding: "20px", borderRadius: "10px", border: "1px solid #e0eae4" }}>
+      <div
+        style={{
+          background: colors.surface,
+          padding: "20px",
+          borderRadius: "10px",
+          border: "1px solid #e0eae4",
+        }}
+      >
         <h3 style={{ margin: "0 0 8px 0", color: colors.text, fontSize: "1.1rem" }}>
-          Organization-Level Human Decisions & Follow-up
+          Organization-Level Human Decisions &amp; Follow-up
         </h3>
         <p style={{ margin: "0 0 16px 0", color: colors.muted, fontSize: "0.88rem" }}>
-          Record organization-wide initiatives (e.g. company wellness cycles, hiring allocation, workload rebalancing). Human follow-ups operate at the organization level without individual employee case files.
+          Record organization-wide initiatives (e.g. wellness cycles, hiring allocation, workload
+          rebalancing). Human follow-ups operate at the organization level without individual
+          employee case files.
         </p>
 
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!newHrActionRationale) return;
-            const newAct: HumanActionRecord = {
-              id: `act-hr-${Date.now()}`,
-              orgId: "demo-org",
-              scope: "hr",
-              authorId: "user-hr-01",
-              authorName: "People Operations Lead",
-              rationale: newHrActionRationale,
-              status: "open",
-              followUpAt: newHrActionFollowUp || undefined,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-            setHrActions((prev) => [newAct, ...prev]);
-            setNewHrActionRationale("");
-            setNewHrActionFollowUp("");
-          }}
+          onSubmit={(e) => void recordAction(e)}
           style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}
         >
           <div>
-            <label style={{ display: "block", fontSize: "0.85rem", color: colors.muted, marginBottom: "4px" }}>
-              Action Rationale & Program Plan
+            <label
+              style={{
+                display: "block",
+                fontSize: "0.85rem",
+                color: colors.muted,
+                marginBottom: "4px",
+              }}
+            >
+              Action Rationale &amp; Program Plan
             </label>
             <textarea
               rows={3}
-              value={newHrActionRationale}
-              onChange={(e) => setNewHrActionRationale(e.target.value)}
+              value={newRationale}
+              onChange={(e) => setNewRationale(e.target.value)}
               placeholder="Document organization-level follow-up (e.g. scheduling no-meeting focus blocks, reviewing project headcount allocation)..."
               required
-              style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #cedcd3", fontSize: "0.9rem" }}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "6px",
+                border: "1px solid #cedcd3",
+                fontSize: "0.9rem",
+                boxSizing: "border-box",
+              }}
             />
           </div>
-
           <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
             <div style={{ width: "180px" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", color: colors.muted, marginBottom: "4px" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.85rem",
+                  color: colors.muted,
+                  marginBottom: "4px",
+                }}
+              >
                 Follow-up Date (Optional)
               </label>
               <input
                 type="date"
-                value={newHrActionFollowUp}
-                onChange={(e) => setNewHrActionFollowUp(e.target.value)}
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cedcd3" }}
+                value={newFollowUp}
+                onChange={(e) => setNewFollowUp(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #cedcd3",
+                }}
               />
             </div>
-
             <button
               type="submit"
+              disabled={submitting}
               style={{
                 padding: "9px 20px",
                 borderRadius: "6px",
@@ -312,16 +347,39 @@ export const HrPage: React.FC = () => {
                 background: colors.accent,
                 color: "#ffffff",
                 fontWeight: 600,
-                cursor: "pointer",
+                cursor: submitting ? "wait" : "pointer",
               }}
             >
-              Record Organization Action
+              {submitting ? "Saving…" : "Record Organization Action"}
             </button>
           </div>
+          {submitError && (
+            <div
+              role="alert"
+              style={{ padding: "10px", color: "#b3261e", background: "#fce8e6", borderRadius: "6px" }}
+            >
+              {submitError}
+            </div>
+          )}
         </form>
 
+        {actionsLoading && (
+          <p style={{ color: colors.muted }}>Loading HR actions…</p>
+        )}
+        {actionsError && (
+          <div
+            role="alert"
+            style={{ padding: "12px", color: "#b3261e", background: "#fce8e6", borderRadius: "8px" }}
+          >
+            {actionsError}
+          </div>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          {hrActions.map((act) => (
+          {!actionsLoading && actions.length === 0 && !actionsError && (
+            <p style={{ color: colors.muted }}>No organization-level actions recorded yet.</p>
+          )}
+          {actions.map((act) => (
             <div
               key={act.id}
               style={{
@@ -334,14 +392,28 @@ export const HrPage: React.FC = () => {
                 gap: "6px",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong style={{ color: colors.text, fontSize: "0.95rem" }}>{act.authorName}</strong>
+              <div
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+              >
+                <strong style={{ color: colors.text, fontSize: "0.95rem" }}>
+                  {act.authorName}
+                </strong>
                 <span
                   style={{
                     padding: "2px 8px",
                     borderRadius: "4px",
-                    background: act.status === "resolved" ? "#e6f4ea" : "#e8f0fe",
-                    color: act.status === "resolved" ? "#137333" : "#1a73e8",
+                    background:
+                      act.status === "resolved"
+                        ? "#e6f4ea"
+                        : act.status === "in_progress"
+                          ? "#e8f0fe"
+                          : "#fef7e0",
+                    color:
+                      act.status === "resolved"
+                        ? "#137333"
+                        : act.status === "in_progress"
+                          ? "#1a73e8"
+                          : "#b06000",
                     fontSize: "0.78rem",
                     fontWeight: 600,
                   }}
@@ -352,9 +424,16 @@ export const HrPage: React.FC = () => {
               <p style={{ margin: 0, color: colors.text, fontSize: "0.9rem", lineHeight: 1.5 }}>
                 {act.rationale}
               </p>
-              <div style={{ display: "flex", justifyContent: "space-between", color: colors.muted, fontSize: "0.8rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  color: colors.muted,
+                  fontSize: "0.8rem",
+                }}
+              >
                 <span>Recorded: {new Date(act.createdAt).toLocaleDateString()}</span>
-                {act.followUpAt && <span>Review by: {act.followUpAt}</span>}
+                {act.followUpAt && <span>Review by: {act.followUpAt.slice(0, 10)}</span>}
               </div>
             </div>
           ))}

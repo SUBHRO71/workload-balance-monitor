@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+﻿import { useEffect, useState, type CSSProperties } from "react";
 import { PulseLoader } from "./pulse/loader";
 import { cx, CountUp, Parallax, Reveal } from "./pulse/primitives";
 import { PulseMark, Waveform } from "./pulse/visuals";
@@ -188,19 +188,35 @@ function LandingPage() {
 
 function DashboardRoute() {
   const auth = useAuth();
-  const initialTab = (window.location.pathname.split("/")[2] || "dashboard") as NavTab;
-  const [activeTab, setActiveTab] = useState<NavTab>(initialTab);
 
   if (auth.loading) return <AuthLoading />;
   if (!auth.authenticated) return <LoginPage />;
 
   const activeMembership = auth.memberships.find((membership) => membership.status === "active");
   const roles = activeMembership?.roles ?? [];
-  const allowedTabs: NavTab[] = ["dashboard", "tasks", "checkins", "private", "trends", "sharing", "notifications", "privacy", "settings"];
-  if (roles.includes("manager")) allowedTabs.push("manager");
-  if (roles.includes("hr")) allowedTabs.push("hr");
-  if (roles.includes("org_admin")) allowedTabs.push("admin");
-  const selectedTab = allowedTabs.includes(activeTab) ? activeTab : "dashboard";
+
+  // Build role-scoped allowed tabs: work roles get only their tab; personal role gets personal tabs.
+  const isManager = roles.includes("manager");
+  const isHr = roles.includes("hr");
+  const isAdmin = roles.includes("org_admin");
+  const isWorkRole = isManager || isHr || isAdmin;
+
+  const allowedTabs: NavTab[] = isWorkRole
+    ? [
+        ...(isManager ? (["manager"] as NavTab[]) : []),
+        ...(isHr ? (["hr"] as NavTab[]) : []),
+        ...(isAdmin ? (["admin"] as NavTab[]) : []),
+      ]
+    : ["dashboard", "tasks", "checkins", "private", "trends", "sharing", "notifications", "privacy", "settings"];
+
+  // Default tab: first allowed tab
+  const defaultTab = allowedTabs[0] ?? "dashboard";
+  const urlSegment = window.location.pathname.split("/")[2] as NavTab | undefined;
+  const [activeTab, setActiveTab] = useState<NavTab>(
+    urlSegment && allowedTabs.includes(urlSegment) ? urlSegment : defaultTab,
+  );
+
+  const selectedTab = allowedTabs.includes(activeTab) ? activeTab : defaultTab;
   const selectTab = (tab: NavTab) => {
     if (!allowedTabs.includes(tab)) return;
     setActiveTab(tab);
@@ -213,11 +229,9 @@ function DashboardRoute() {
         activeTab={selectedTab}
         onSelectTab={selectTab}
         allowedTabs={allowedTabs}
-        isDemoMode={false}
-        onToggleDemo={() => undefined}
       />
       <main style={{ maxWidth: "1000px", margin: "0 auto", padding: "30px 20px" }}>
-        {selectedTab === "dashboard" && <DashboardPage />}
+        {selectedTab === "dashboard" && <DashboardPage onNavigate={selectTab} />}
         {selectedTab === "tasks" && <TasksPage />}
         {selectedTab === "checkins" && <CheckInsPage />}
         {selectedTab === "private" && <PrivateItemsPage />}

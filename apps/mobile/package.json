@@ -8,7 +8,11 @@
     "@workload/design-tokens": "workspace:*",
     "@workload/domain": "workspace:*",
     "expo": "~57.0.22",
+    "expo-auth-session": "~57.0.12",
+    "expo-crypto": "~57.0.3",
+    "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-native": "0.86.3"
   },

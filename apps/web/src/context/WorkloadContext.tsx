@@ -14,7 +14,6 @@ import type {
 import {
   calculateWeeklyWorkload,
   generatePersonalInsights,
-  privateItemDeleteAfter,
   type PersonalInsight,
   type WeeklyWorkloadPoint,
 } from "@workload/domain";
@@ -35,14 +34,12 @@ interface WorkloadContextType {
   addCheckIn: (input: CheckInInput) => Promise<void>;
   deleteCheckIn: (id: string) => Promise<void>;
   privateItems: PrivateItemRecord[];
-  addPrivateItem: (input: PrivateItemInput) => void;
-  deletePrivateItem: (id: string) => void;
+  addPrivateItem: (input: PrivateItemInput) => Promise<void>;
+  deletePrivateItem: (id: string) => Promise<void>;
   trends: WeeklyWorkloadPoint[];
   insights: PersonalInsight[];
   evidenceStrength: EvidenceStrength;
   dismissInsight: (title: string) => void;
-  exportData: () => Promise<string>;
-  deleteAccount: () => Promise<{ success: boolean; deletedCount: number }>;
 }
 
 const defaultConsent: ConsentScopes = {
@@ -146,41 +143,17 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
     setCheckIns((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const addPrivateItem = (input: PrivateItemInput) => {
+  const addPrivateItem = async (input: PrivateItemInput) => {
     if (!consent.personalProcessing) {
       alert("Personal processing is disabled in your Privacy settings.");
       return;
     }
-    const now = new Date().toISOString();
-    const deleteAfter = privateItemDeleteAfter(input);
-    const baseItem = {
-      entityType: "PRIVATE_ITEM" as const,
-      id: `item-${Date.now()}`,
-      orgId: "demo-org",
-      ownerId: "demo-user",
-      type: input.type,
-      title: input.title,
-      schemaVersion: 1 as const,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-      ...(input.content !== undefined ? { content: input.content } : {}),
-    };
-    const item: PrivateItemRecord = input.lifecycle === "one_time"
-      ? {
-          ...baseItem,
-          lifecycle: "one_time",
-          eventEndAt: input.eventEndAt,
-          deleteAfter: deleteAfter ?? new Date(Date.now() + 365 * 86400000).toISOString(),
-        }
-      : {
-          ...baseItem,
-          lifecycle: "ongoing",
-        };
-    setPrivateItems((prev) => [item, ...prev]);
+    const newItem = await api.createPrivateItem(input);
+    setPrivateItems((prev) => [newItem, ...prev]);
   };
 
-  const deletePrivateItem = (id: string) => {
+  const deletePrivateItem = async (id: string) => {
+    await api.deletePrivateItem(id);
     setPrivateItems((prev) => prev.filter((i) => i.id !== id));
   };
 
@@ -196,41 +169,6 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
 
   const dismissInsight = (title: string) => {
     setDismissedInsightTitles((prev) => new Set([...prev, title]));
-  };
-
-  const exportData = async (): Promise<string> => {
-    const payload = {
-      exportId: `export_${Date.now()}`,
-      generatedAt: new Date().toISOString(),
-      metadata: {
-        version: 1,
-        schemaVersion: 1,
-        notice: "This archive contains strictly your personal workload records. In accordance with privacy architecture, no other employees' records or raw aggregate datasets are included.",
-        downloadExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      },
-      preferences,
-      consent,
-      tasks,
-      checkIns,
-      privateItems,
-      trends,
-      insights,
-    };
-    return JSON.stringify(payload, null, 2);
-  };
-
-  const deleteAccount = async (): Promise<{ success: boolean; deletedCount: number }> => {
-    const totalDeleted = tasks.length + checkIns.length + privateItems.length;
-    setTasks([]);
-    setCheckIns([]);
-    setPrivateItems([]);
-    setConsent({
-      personalProcessing: false,
-      teamAggregation: false,
-      organizationAggregation: false,
-      notifications: { inApp: false, managerEmail: false, devicePush: false },
-    });
-    return { success: true, deletedCount: totalDeleted };
   };
 
   return (
@@ -256,8 +194,6 @@ export function WorkloadProvider({ children }: { children: React.ReactNode }) {
         insights,
         evidenceStrength: strength,
         dismissInsight,
-        exportData,
-        deleteAccount,
       }}
     >
       {children}
