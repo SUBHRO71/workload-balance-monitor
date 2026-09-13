@@ -33,7 +33,7 @@ export const SharingPage: React.FC = () => {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [selectedCheckInIds, setSelectedCheckInIds] = useState<string[]>([]);
   const [preview, setPreview] = useState<Publication | null>(null);
-  const [previewSignature, setPreviewSignature] = useState("");
+  const [previewInput, setPreviewInput] = useState<SharingGrantInput | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -66,8 +66,6 @@ export const SharingPage: React.FC = () => {
     };
   };
 
-  const signatureFor = (input: SharingGrantInput) => JSON.stringify(input);
-
   const handlePreview = async () => {
     if (!managerId || !hasSelection) return;
     if (fromDate > toDate) { setError("The start date must be on or before the end date."); return; }
@@ -75,25 +73,19 @@ export const SharingPage: React.FC = () => {
     try {
       const input = buildInput();
       setPreview(await api.createSharePreview(input));
-      setPreviewSignature(signatureFor(input));
+      setPreviewInput(input);
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to build preview"); }
     finally { setBusy(false); }
   };
 
   const handleConfirm = async () => {
-    if (!preview) return;
-    const input = buildInput();
-    if (signatureFor(input) !== previewSignature) {
-      setPreview(null);
-      setError("Something changed after this preview. Review the snapshot again before publishing.");
-      return;
-    }
+    if (!preview || !previewInput) return;
     setBusy(true); setError("");
     try {
-      const result = await api.createShare(input);
+      const result = await api.createShare(previewInput);
       setGrants((current) => [result.grant, ...current]);
-      setPreview(null); setPreviewSignature(""); setSelectedTaskIds([]); setSelectedCheckInIds([]); setIsComposing(false);
+      setPreview(null); setPreviewInput(null); setSelectedTaskIds([]); setSelectedCheckInIds([]); setIsComposing(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to publish share"); }
     finally { setBusy(false); }
   };
@@ -109,7 +101,7 @@ export const SharingPage: React.FC = () => {
 
   const toggle = (id: string, selected: string[], update: React.Dispatch<React.SetStateAction<string[]>>) => {
     update(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
-    setPreview(null); setPreviewSignature("");
+    setPreview(null); setPreviewInput(null);
   };
   const hasSelection = selectedTaskIds.length + selectedCheckInIds.length > 0;
 
